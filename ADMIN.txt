@@ -1,0 +1,366 @@
+##############################################################################
+
+Getting
+-------
+
+front end: git clone https://github.com/DSpace/dspace-angular.git
+           cd dspace-angular
+           git switch dspace-7_x
+           yarn install
+
+backend: git clone https://github.com/DSpace/DSpace.git
+         cd DSpace
+         git switch dspace-7_x
+         docker compose -p d7 -f docker-compose.yml [-f d7.override.yml] pull
+         cp dspace/config/local.cfg.EXAMPLE local.cfg
+
+         docker exec -ti dspacedb /bin/bash
+         psql -U dspace
+         create extension pgcrypto;
+
+         docker exec -ti dspace /bin/bash
+         /dspace/bin/dspace create-administrator
+
+
+dspace-angular/config/config.yml should look like this:
+
+ui:
+  ssl: false
+  host: localhost
+  port: 4000
+  nameSpace: /
+  useProxies: true
+
+rest:
+  ssl: false
+  host: localhost
+  port: 8080
+  nameSpace: /server
+
+
+##############################################################################
+
+Starting
+--------
+
+im case solr is running:
+
+   /opt/solr/bin/solr stop -p 8983
+
+in work/dspace/DSpace:
+
+  docker-compose -p d7 -f docker-compose.yml up [-d]
+
+in work/dspace/dspace-angular:
+
+  yarn start
+
+##############################################################################
+
+Reloading
+---------
+
+docker cp database_dump.sql dspacedb:/
+docker exec -ti dspacedb /bin/bash
+dropdb -U dspace dspace -f
+createdb -U dspace dspace
+psql -U dspace -d dspace < database_dump.sql
+
+docker exec -ti dspace /bin/bash
+/dspace/bin/dspace index-discovery -b
+/dspace/bin/dspace create-administrator
+
+##############################################################################
+
+Metadata
+========
+
+name   = "L., Logatcheva, K." [2]
+format = "A./ A/ A."'
+uuid   = "d8f75246-f461-4129-bbae-151a53ec96af" [1]
+
+
+Object
+======
+
+name = "Behavioural economics: assessing food waste innovations diffusion through ABM models -
+Insights from Italy and the Netherlands."
+uuid = "d8f75246-f461-4129-bbae-151a53ec96af"
+
+
+Collection
+==========
+
+name = "Reports"
+uuid = "3c1f4356-d58d-41ac-bc7f-77198870c129" [3]
+
+name = "James Hutton Institute" [4]
+uuid = "bebe0fed-a20f-404d-99b4-05b613494a95" [5]
+
+
+metadatavalue:
+
+dspace_object_id  = [1]          [5]
+metadata_field_id = 9            70
+metadata_value_id = 1074241      11028
+text_value        = [2]          [4]
+
+
+collection2item:                   item:
+
+collection_id = [3]                owning_collection
+item_id       = [1]                uuid
+
+
+community2collection:
+
+collection_id = [3]
+community_id  = [5]
+
+
+##############################################################################
+
+Postgres
+--------
+
+# https://stackoverflow.com/questions/37694987/connecting-to-postgresql-in-a-docker-container-from-outside
+
+
+(don't actually need this!)
+docker run --name dspacedb --net host -e POSTGRES_PASSWORD=dspace -d postgres
+
+
+psql -h localhost -p 5432 -U postgres
+
+
+Tables:
+
+| metadatafieldregistry
+
+ metadata_field_id | metadata_schema_id |   element   | qualifier |
+                 1 |                  2 | firstname   |           | 
+                 2 |                  2 | lastname    |           | 
+                 3 |                  2 | phone       |           | 
+                 4 |                  2 | language    |           | 
+                 5 |                  1 | provenance  |           | 
+                 6 |                  1 | rights      | license   | 
+                 7 |                  1 | contributor |           |
+                 8 |                  1 | contributor | advisor   |
+                 9 |                  1 | contributor | author    | 
+                10 |                  1 | contributor | editor    | 
+
+| metadatavalue           
+
+fields are:
+
+ metadata_value_id
+ metadata_field_id
+ text_value
+ text_lang
+ place
+ authority
+ confidence
+ dspace_object_id           @@@
+
+
+community.uuid  <----> @@@ <----> community2collection.community_id
+collection.uuid <----> @@@ <----> community2collection.collection_id
+
+item.uuid              <----> @@@
+     submitter.id      <----> @@@
+     owning_collection <----> @@@
+
+relationship.left_id   <----> @@@
+             right_id  <----> @@@
+             type_id   <----> relationship_type
+
+850f   root
+
+d262   Community
+
+07e3   Collection
+23b7   Person collection
+b60c   Publication collection
+
+3f2c   Maria Aamelfot           these are both items!
+f615   alpacas
+
+
+SO:
+
+relationship
+------------
+
+ id |               left_id                | type_id |               right_id               |
+----+--------------------------------------+---------+--------------------------------------+
+  1 | 427bb98f-3048-4169-9f87-4113b4c3f615 |       1 | 09baf063-8fb9-411f-90aa-d843c2293f2c |
+
+
+relationship_type
+-----------------
+
+ id | left_type | right_type |        leftward_type        |       rightward_type        |
+----+-----------+------------+-----------------------------+-----------------------------+
+  1 |         2 |          3 | isAuthorOfPublication       | isPublicationOfAuthor       |
+  2 |         2 |          4 | isProjectOfPublication      | isPublicationOfProject      |
+  3 |         2 |          5 | isOrgUnitOfPublication      | isPublicationOfOrgUnit      |
+  4 |         3 |          4 | isProjectOfPerson           | isPersonOfProject           |
+  5 |         3 |          5 | isOrgUnitOfPerson           | isPersonOfOrgUnit           |
+  6 |         4 |          5 | isOrgUnitOfProject          | isProjectOfOrgUnit          |
+  7 |         6 |          7 | isVolumeOfJournal           | isJournalOfVolume           |
+  8 |         7 |          8 | isIssueOfJournalVolume      | isJournalVolumeOfIssue      |
+  9 |         2 |          5 | isAuthorOfPublication       | isPublicationOfAuthor       |
+ 10 |         8 |          2 | isPublicationOfJournalIssue | isJournalIssueOfPublication |
+
+
+item
+-----
+
+                  uuid                 |             submitter_id             |          owning_collection           
++--------------------------------------+--------------------------------------+--------------------------------------
+| 09baf063-8fb9-411f-90aa-d843c2293f2c | bcaa2c69-50a0-42f2-9418-ab795057850f | 066e4171-e0ff-4bae-8f5c-58f6279623b7
+| 427bb98f-3048-4169-9f87-4113b4c3f615 | bcaa2c69-50a0-42f2-9418-ab795057850f | b0cc3597-9a34-4c16-903e-f7136edbb60c
+
+##############################################################################
+
+JSON requests
+=============
+
+create a community
+------------------
+
+POST http://localhost:8080/server/api/core/communities
+
+    {"type":{"value":"community"},
+     "metadata":{"dc.title":[{"language":null,"value":"community"}],
+                 "dc.description":[{"language":null}],
+                 "dc.description.abstract":[{"language":null}],
+                 "dc.rights":[{"language":null}],
+                 "dc.description.tableofcontents":[{"language":null}]}}
+
+Response: 201
+
+{
+  "id" : "<UUID>",
+  "uuid" : "<UUID>",
+  "name" : "community",
+  "handle" : "123456789/19",
+  "metadata" : { (edited) },
+  "archivedItemsCount" : -1,
+  "type" : "community",
+  "_links" : { (edited)  }
+}
+
+
+create a collection
+-------------------
+
+POST http://localhost:8080/server/api/core/collections?parent=<UUID-OF-COMMUNITY>
+
+{"type": {"value":"community"},
+ "metadata":{"dc.title":[{"language":null,"value":"person collection"}],
+             "dc.description":[{"language":null}],
+             "dc.description.abstract":[{"language":null}],
+             "dc.rights":[{"language":null}],
+             "dc.description.tableofcontents":[{"language":null}],
+             "dc.rights.license":[{"language":null}],
+             "dspace.entity.type":[{"language":null,"value":"Person"}]}
+}
+
+Response: 201
+
+{
+  "id" : "<UUID>",
+  "uuid" : "<UUID>",
+  "name" : "person collection",
+  "handle" : "123456789/20",
+  "metadata" : { (edited) },
+  "archivedItemsCount" : -1,
+  "type" : "collection",
+  "_links" : { (edited)  }
+}
+
+
+create a person within a collection
+-----------------------------------
+
+POST
+http://localhost:8080/server/api/submission/workspaceitems?projection=full&owningCollection=<UUID>
+
+with empty payload
+
+{
+  "id" : 39,
+  "errors" : [ {
+    "message" : "error.validation.filerequired",
+    "paths" : [ "/sections/upload" ]
+  }, {
+    "message" : "error.validation.license.notgranted",
+    "paths" : [ "/sections/license" ]
+  } ],
+  "lastModified" : "2023-12-14T10:12:32.731+00:00",
+  "sections" : {
+    "license" : {
+      "url" : null,
+      "acceptanceDate" : null,
+      "granted" : false
+    },
+    "personStep" : { },
+    "upload" : {
+      "files" : [ ]
+    },
+    "collection" : "f9d05271-3c46-40f8-8bea-3d903584052f"
+  },
+  "type" : "workspaceitem",
+  "_links" : { (edited) },
+  "_embedded" : { (edited ) }
+}
+
+
+POST http://localhost:8080/server/api/submission/workspaceitems/<ID>
+
+Content-Disposition: form-data; name="file"; filename="alpacas.jpg"
+Content-Type: image/jpeg
+(file data)
+
+
+PATCH http://localhost:8080/server/api/submission/workspaceitems/<ID>
+
+[{"op":"add",
+  "path":"/sections/personStep/person.familyName",
+  "value":[{"value":"Surname",
+            "language":null,
+            "authority":null,
+            "display":"Surname",
+            "confidence":-1,
+            "place":0,
+            "otherInformation":null}]},
+ {"op":"add",
+  "path":"/sections/personStep/person.givenName",
+  "value":[{"value":"Forename",
+            "language":null,
+            "authority":null,
+            "display":"Forename",
+            "confidence":-1,
+            "place":0,
+            "otherInformation":null}]},
+ {"op":"add",
+  "path":"/sections/personStep/person.birthDate",
+  "value":[{"value":"2020",
+            "language":null,
+            "authority":null,
+            "display":"2020",
+            "confidence":-1,
+            "place":0,
+            "otherInformation":null}]
+}]
+
+
+
+PATCH http://localhost:8080/server/api/submission/workspaceitems/<ID> again
+
+[{"op":"add","path":"/sections/license/granted","value":"true"}]
+
+
+create an item within a collection
+----------------------------------
