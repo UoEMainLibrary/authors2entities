@@ -1,4 +1,26 @@
+from dataclasses import dataclass
 import requests, pprint, json
+
+@dataclass
+class Item:
+    uuid:    str
+    title:   str
+    authors: list[str]
+
+    @classmethod
+    def from_json(cls, json):
+        match json:
+            case { "_embedded": {
+                    "indexableObject": {
+                        "id": uuid, "metadata": {
+                            "dc.contributor.author": authors,
+                            "dc.title": titles,
+                        }
+                      }
+                    }
+                  }:
+                title = " ".join([ v["value"] for v in titles ])
+                return cls(uuid, title, [ author["value"] for author in authors ])
 
 class DSpaceAPI:
     def __init__(self, host, port):
@@ -68,16 +90,22 @@ class DSpaceAPI:
             case { "_embedded": { "mappedItems": l } }:
                 print(len(l))
 
-    # FIXME! Need to get items page-by-page and concatenate
-
     def get_items(self, coll_id):
-        resp = requests.get(f"{self.url}/discover/search/objects?" +
-                            "sort=dc.date.accessioned,DESC&page=0&size=20" +
-                            f"&scope={coll_id}&dsoType=ITEM")
+        ret, page = [], 0
 
-        match resp.json():
-            case { "_embedded": { "searchResult": { "_embedded": { "objects": l } } } }:
-                print(len(l))
+        while True:
+            resp = requests.get(f"{self.url}/discover/search/objects?" +
+                                f"sort=dc.date.accessioned,DESC&page={page}&size=20" +
+                                f"&scope={coll_id}&dsoType=ITEM")
+            match resp.json():
+                case { "_embedded": { "searchResult": { "_embedded": { "objects": objects },
+                                                        "page": { "totalPages": n } } } }:
+                    ret += [ Item.from_json(obj) for obj in objects ]
+
+            page += 1
+            if page >= n: break
+
+        return [ obj for obj in ret if obj is not None ]
 
     # find
 
