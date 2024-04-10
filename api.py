@@ -112,50 +112,94 @@ class DSpaceAPI:
     def find_community(self, comm_name):
         resp = requests.get(f"{self.url}/core/communities/search/top")
 
-        if resp.status_code != 200:
-            print(f"Community '{comm_name}' does not exist")
-            return
+        if resp.status_code == 200:
+            match resp.json():
+                case { "_embedded": { "communities": l } }:
+                    for c in l:
+                        match c:
+                            case { "name": name, "uuid": uuid } if name == comm_name:
+                                print(f"Found community '{name}' with uuid {uuid}")
+                                return uuid
 
-        match resp.json():
-            case { "_embedded": { "communities": l } }:
-                for c in l:
-                    match c:
-                        case { "name": name, "uuid": uuid } if name == comm_name:
-                            print(f"Found community '{name}' with uuid {uuid}")
-                            return uuid
+            print(f"Community '{comm_name}' does not exist")
 
     def find_collection(self, comm_uuid, coll_name):
         resp = requests.get(f"{self.url}/core/communities/{comm_uuid}/collections")
 
-        if resp.status_code != 200:
-            print(f"Collection '{coll_name}' does not exist")
-            return
+        if resp.status_code == 200:
+            match resp.json():
+                case { "_embedded": { "collections": l } }:
+                    for c in l:
+                        match c:
+                            case { "name": name, "uuid": uuid } if name == coll_name:
+                                print(f"Found collection '{name}' with uuid {uuid}")
+                                return uuid
 
-        match resp.json():
-            case { "_embedded": { "collections": l } }:
-                for c in l:
-                    match c:
-                        case { "name": name, "uuid": uuid } if name == coll_name:
-                            print(f"Found collection '{name}' with uuid {uuid}")
-                            return uuid
-
-    def find_eperson(self, email):
-        resp = requests.get(f"{self.url}/eperson/epersons/search/byEmail?email={email}")
-
-        if resp.status_code != 200:
-            print(f"Failed to find EPerson '{email}': {resp.status_code}")
-            print(resp.json)
-            return
-
-#        match resp.json():
-#            case { "_embedded": { "collections": l } }:
-#                for c in l:
-#                    match c:
-#                        case { "name": name, "uuid": uuid } if name == COLLECTION:
-#                            print(f"Found collection with uuid {uuid}")
-#                            return uuid
+        print(f"Collection '{coll_name}' does not exist")
 
     # create
+
+    def create_workspace_item(self, coll_uuid):
+        path = f"submission/workspaceitems?owningCollection={coll_uuid}"
+
+        resp = requests.post(f"{self.url}/{path}",
+                             headers = {
+                                 "X-XSRF-TOKEN": self.xsrf_token,
+                                 "Authorization": self.auth,
+                                 "Content-Type": "application/json",
+                                 },
+                             cookies = { "DSPACE-XSRF-COOKIE": self.xsrf_cookie },
+                             json = "")
+
+        if resp.status_code == 201:
+            match resp.json():
+                case { "id": wsid }:
+                    print(f"Created workspace item with id {wsid}")
+                    return wsid
+#                case { "_embedded": { "item": { "uuid": uuid } }}:
+#                       print(f"Created workspace item with uuid {uuid}")
+#                       return uuid
+
+        print(f"Failed to create item")
+
+    def get_workspace_item_status(self, wsitem):
+        resp = requests.get(f"{self.url}/submission/workspaceitems/{wsitem}",
+                             headers = {
+                                 "X-XSRF-TOKEN": self.xsrf_token,
+                                 "Authorization": self.auth,
+                                 },
+                             cookies = { "DSPACE-XSRF-COOKIE": self.xsrf_cookie },
+                            )
+
+        print(resp.status_code)
+        
+        if resp.status_code == 200:
+            print(resp.json())
+
+    def submit_workspace_item(self, wsitem):
+        path = f"workflow/workflowitems"
+        data = f"{self.url}/submission/workspaceitems/{wsitem}"
+
+        resp = requests.post(f"{self.url}/{path}",
+                             headers = {
+                                 "X-XSRF-TOKEN": self.xsrf_token,
+                                 "Authorization": self.auth,
+                                 "Content-Type": "text/uri-list",
+                                 },
+                             cookies = { "DSPACE-XSRF-COOKIE": self.xsrf_cookie },
+                             data = data)
+
+        if resp.status_code == 201:
+            print(resp.json())
+            return
+#            match resp.json():
+#                case { "_embedded": { "item": { "uuid": uuid } }}:
+#                       print(f"Created workspace item with uuid {uuid}")
+#                       return uuid
+
+        print(f"Failed to submit item {wsitem}: {resp.status_code}")
+        print(data)
+        print(resp.text)
 
     """
     def create_collection(self, comm_uuid):
@@ -188,29 +232,6 @@ class DSpaceAPI:
             return uuid
     """
 
-    def create_eperson(self, surname, forename):
-        email = f"{forename}-{surname}@somewhere.ac.uk"
-
-        json = {"type": "eperson",
-                "email": email,
-                "metadata": { "eperson.firstname": [ { "value": forename, } ],
-                              "eperson.lastname":  [ { "value": surname,  } ]
-                              }}
-
-        resp = self.post("eperson/epersons",
-                          { "Authorization": self.auth },
-                          json = json)
-
-        match resp.status_code:
-            case 201:
-                uuid = resp.json()["uuid"]
-                print(f"Created eperson with uuid {uuid}")
-                return uuid
-            case 401: print("Create eperson failed: not authorised")
-            case 403: print("Create eperson failed: not permitted")
-            case 422: print(f"Create eperson failed: bad email '{email}'")
-            case 500: print(f"Create eperson failed: internal server error")
-
     # delete
 
     def delete_community(self, comm_uuid):
@@ -221,3 +242,8 @@ class DSpaceAPI:
             case 401: print("Delete community failed: not authorised")
             case 403: print("Delete community failed: not permitted")
             case 404: print("Delete community failed: not found")
+
+    # patch
+
+    def patch_item(self, wsitem, surname, forename):
+        pass
