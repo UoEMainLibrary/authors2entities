@@ -223,144 +223,45 @@ item
 
 ##############################################################################
 
-JSON requests
-=============
+POST /server/api/submission/workspaceitems/26563 HTTP/1.1
 
-create a community
-------------------
+Host: localhost:8080
+User-Agent: Mozilla/5.0 (X11; Ubuntu; Linux x86_64; rv:123.0) Gecko/20100101 Firefox/123.0
+Accept: */*
+Accept-Language: en-GB,en;q=0.5
+Accept-Encoding: gzip, deflate, br
+X-XSRF-TOKEN: f89502ad-16c6-46c6-9ce1-bd259bed33e4
+Authorization: Bearer eyJhbGciOiJIUzI1NiJ9.eyJlaWQiOiJkOTllMmExMC03M2JmLTQ1MzItOGJiZi1kY2QwOTE4N2I5NzIiLCJzZyI6W10sImF1dGhlbnRpY2F0aW9uTWV0aG9kIjoicGFzc3dvcmQiLCJleHAiOjE3MTI4MzAyNjd9.W_7UAO8b0gLYAW_yVhw9hhsjqsPVpmFrsEq7qi42gec
+Content-Type: multipart/form-data; boundary=---------------------------1044634842660979612270025557
+Content-Length: 68252
+Origin: http://localhost:4000
+DNT: 1
+Sec-GPC: 1
+Connection: keep-alive
+Referer: http://localhost:4000/
+Cookie: DSPACE-XSRF-COOKIE=f89502ad-16c6-46c6-9ce1-bd259bed33e4; CORRELATION-ID=eba33973-36c4-4445-a038-4bd41a5a574e; dsLanguage=en; klaro-anonymous=%7B%22authentication%22%3Atrue%2C%22preferences%22%3Atrue%2C%22acknowledgement%22%3Atrue%7D; klaro-d99e2a10-73bf-4532-8bbf-dcd09187b972={%22authentication%22:true%2C%22preferences%22:true%2C%22acknowledgement%22:true}; XSRF-TOKEN=f89502ad-16c6-46c6-9ce1-bd259bed33e4; dsAuthInfo={%22accessToken%22:%22eyJhbGciOiJIUzI1NiJ9.eyJlaWQiOiJkOTllMmExMC03M2JmLTQ1MzItOGJiZi1kY2QwOTE4N2I5NzIiLCJzZyI6W10sImF1dGhlbnRpY2F0aW9uTWV0aG9kIjoicGFzc3dvcmQiLCJleHAiOjE3MTI4MzAyNjd9.W_7UAO8b0gLYAW_yVhw9hhsjqsPVpmFrsEq7qi42gec%22%2C%22expires%22:1712830267000}
+Sec-Fetch-Dest: empty
+Sec-Fetch-Mode: cors
+Sec-Fetch-Site: same-site
 
-POST http://localhost:8080/server/api/core/communities
+-----------------------------1044634842660979612270025557
+Content-Disposition: form-data; name="file"; filename="fun.png"
+Content-Type: image/png
 
-    {"type":{"value":"community"},
-     "metadata":{"dc.title":[{"language":null,"value":"community"}],
-                 "dc.description":[{"language":null}],
-                 "dc.description.abstract":[{"language":null}],
-                 "dc.rights":[{"language":null}],
-                 "dc.description.tableofcontents":[{"language":null}]}}
+[ file contents ]
+-----------------------------1044634842660979612270025557--
 
-Response: 201
+
 
 {
-  "id" : "<UUID>",
-  "uuid" : "<UUID>",
-  "name" : "community",
-  "handle" : "123456789/19",
-  "metadata" : { (edited) },
-  "archivedItemsCount" : -1,
-  "type" : "community",
-  "_links" : { (edited)  }
-}
-
-
-create a collection
--------------------
-
-POST http://localhost:8080/server/api/core/collections?parent=<UUID-OF-COMMUNITY>
-
-{"type": {"value":"community"},
- "metadata":{"dc.title":[{"language":null,"value":"person collection"}],
-             "dc.description":[{"language":null}],
-             "dc.description.abstract":[{"language":null}],
-             "dc.rights":[{"language":null}],
-             "dc.description.tableofcontents":[{"language":null}],
-             "dc.rights.license":[{"language":null}],
-             "dspace.entity.type":[{"language":null,"value":"Person"}]}
-}
-
-Response: 201
-
-{
-  "id" : "<UUID>",
-  "uuid" : "<UUID>",
-  "name" : "person collection",
-  "handle" : "123456789/20",
-  "metadata" : { (edited) },
-  "archivedItemsCount" : -1,
-  "type" : "collection",
-  "_links" : { (edited)  }
-}
-
-
-create a person within a collection
------------------------------------
-
-POST
-http://localhost:8080/server/api/submission/workspaceitems?projection=full&owningCollection=<UUID>
-
-with empty payload
-
-{
-  "id" : 39,
-  "errors" : [ {
-    "message" : "error.validation.filerequired",
-    "paths" : [ "/sections/upload" ]
-  }, {
-    "message" : "error.validation.license.notgranted",
-    "paths" : [ "/sections/license" ]
-  } ],
-  "lastModified" : "2023-12-14T10:12:32.731+00:00",
-  "sections" : {
-    "license" : {
-      "url" : null,
-      "acceptanceDate" : null,
-      "granted" : false
-    },
-    "personStep" : { },
-    "upload" : {
-      "files" : [ ]
-    },
-    "collection" : "f9d05271-3c46-40f8-8bea-3d903584052f"
-  },
-  "type" : "workspaceitem",
-  "_links" : { (edited) },
-  "_embedded" : { (edited ) }
-}
-
-
-POST http://localhost:8080/server/api/submission/workspaceitems/<ID>
-
-Content-Disposition: form-data; name="file"; filename="alpacas.jpg"
-Content-Type: image/jpeg
-(file data)
-
-
-PATCH http://localhost:8080/server/api/submission/workspaceitems/<ID>
-
-[{"op":"add",
-  "path":"/sections/personStep/person.familyName",
-  "value":[{"value":"Surname",
-            "language":null,
-            "authority":null,
-            "display":"Surname",
-            "confidence":-1,
-            "place":0,
-            "otherInformation":null}]},
- {"op":"add",
-  "path":"/sections/personStep/person.givenName",
-  "value":[{"value":"Forename",
-            "language":null,
-            "authority":null,
-            "display":"Forename",
-            "confidence":-1,
-            "place":0,
-            "otherInformation":null}]},
- {"op":"add",
-  "path":"/sections/personStep/person.birthDate",
-  "value":[{"value":"2020",
-            "language":null,
-            "authority":null,
-            "display":"2020",
-            "confidence":-1,
-            "place":0,
-            "otherInformation":null}]
-}]
-
-
-
-PATCH http://localhost:8080/server/api/submission/workspaceitems/<ID> again
-
-[{"op":"add","path":"/sections/license/granted","value":"true"}]
-
-
-create an item within a collection
-----------------------------------
+'User-Agent': 'python-requests/2.31.0',
+ 'Accept-Encoding': 'gzip, deflate',
+ 'Accept': '*/*',
+ 'Connection': 'keep-alive',
+ 'X-XSRF-TOKEN': '985b9cfc-e539-4672-9784-62063fd349f1',
+ 'Authorization': 'Bearer
+ eyJhbGciOiJIUzI1NiJ9.eyJlaWQiOiJkOTllMmExMC03M2JmLTQ1MzItOGJiZi1kY2QwOTE4N2I5NzIiLCJzZyI6W10sImF1dGhlbnRpY2F0aW9uTWV0aG9kIjoicGFzc3dvcmQiLCJleHAiOjE3MTI4MzI1MjZ9.terdCH0w9m1zota9gagT2sGIl61LhRA2_O6sgSQ38PA',
+ 'Content-Type': 'multipart/form-data',
+ 'Cookie': 'DSPACE-XSRF-COOKIE=985b9cfc-e539-4672-9784-62063fd349f1',
+ 'Content-Length': '696'}
+b'--fcc111999af2f46b138288ec8ea3303d\r\nContent-Disposition: form-data; name="file"; filename="black_pixel.png"\r\n\r\n\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR\x00\x00\x00\x01\x00\x00\x00\x01\x08\x02\x00\x00\x00\x90wS\xde\x00\x00\x01\x83iCCPICC profile\x00\x00(\x91}\x91=H\xc3@\x1c\xc5_\xd3\x8aR+\x0ev\x10q\xc8P\x9d\xec\xa2"\x8e\xb5\nE\xa8\x10j\x85V\x1dL.\xfd\x82&\rI\x8a\x8b\xa3\xe0Zp\xf0c\xb1\xea\xe0\xe2\xac\xab\x83\xab \x08~\x808;8)\xbaH\x89\xffK\n-b<8\xee\xc7\xbb{\x8f\xbbw\x80\xd0\xac2\xcd\n%\x00M\xb7\xcdL*)\xe6\xf2\xabb\xef+B\xe8G\x18A\x04df\x19s\x92\x94\x86\xef\xf8\xbaG\x80\xafwq\x9e\xe5\x7f\xee\xcf1\xa0\x16,\x06\x04D\xe2\x043L\x9bx\x83xf\xd368\xef\x13GYYV\x89\xcf\x89\'L\xba \xf1#\xd7\x15\x8f\xdf8\x97\\\x16xf\xd4\xccf\xe6\x89\xa3\xc4b\xa9\x8b\x95.feS#\x9e&\x8e\xa9\x9aN\xf9B\xcec\x95\xf3\x16g\xadZg\xed{\xf2\x17F\n\xfa\xca2\xd7i\x8e"\x85E,A\x82\x08\x05uTP\x85\x8d8\xad:)\x162\xb4\x9f\xf4\xf1\x8f\xb8~\x89\\\n\xb9*`\xe4X@\r\x1ad\xd7\x0f\xfe\x07\xbf\xbb\xb5\x8aS\x93^R$\t\xf4\xbc8\xce\xc7\x18\xd0\xbb\x0b\xb4\x1a\x8e\xf3}\xec8\xad\x13 \xf8\x0c\\\xe9\x1d\x7f\xad\t\xcc~\x92\xde\xe8h\xb1#`p\x1b\xb8\xb8\xeeh\xca\x1ep\xb9\x03\x0c?\x19\xb2)\xbbR\x90\xa6P,\x02\xefg\xf4My`\xe8\x16\x08\xafy\xbd\xb5\xf7q\xfa\x00d\xa9\xab\xf4\rpp\x08\x8c\x97({\xdd\xe7\xdd}\xdd\xbd\xfd{\xa6\xdd\xdf\x0f\xe6Urn\x15\rD"\x00\x00\x00\tpHYs\x00\x00.#\x00\x00.#\x01x\xa5?v\x00\x00\x00\x07tIME\x07\xe8\x04\x0b\n\x036\xfdBQ\x02\x00\x00\x00\x19tEXtComment\x00Created with GIMPW\x81\x0e\x17\x00\x00\x00\x0cIDAT\x08\xd7c\x90\x14\x15\x05\x00\x00\x8e\x00D\x9dQ>\x8c\x00\x00\x00\x00IEND\xaeB`\x82\r\n--fcc111999af2f46b138288ec8ea3303d--\r\n'

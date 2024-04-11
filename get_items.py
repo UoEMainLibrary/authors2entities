@@ -41,11 +41,11 @@ def create_entities(d, entity_coll):
     for comm, coll, item in yield_items(d):
         for author in item.authors:
             surname, forename = author.split(", ")
-#            print(surname, forename)
-#            print(d.find_eperson(surname, forename))
+            print()
             if (wsitem := d.create_workspace_item(entity_coll)) is None: return
-#            if not d.patch_item(wsitem, surname, forename)) is None: return
 #            if d.get_workspace_item_status(wsitem) is None: return
+            if d.patch_item(wsitem, surname, forename) is None: return
+            if d.add_image(wsitem, "black_pixel.png") is None: return
             if d.submit_workspace_item(wsitem) is None: return
 
 ##############################################################################

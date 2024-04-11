@@ -156,9 +156,6 @@ class DSpaceAPI:
                 case { "id": wsid }:
                     print(f"Created workspace item with id {wsid}")
                     return wsid
-#                case { "_embedded": { "item": { "uuid": uuid } }}:
-#                       print(f"Created workspace item with uuid {uuid}")
-#                       return uuid
 
         print(f"Failed to create item")
 
@@ -171,13 +168,39 @@ class DSpaceAPI:
                              cookies = { "DSPACE-XSRF-COOKIE": self.xsrf_cookie },
                             )
 
-        print(resp.status_code)
-        
         if resp.status_code == 200:
-            print(resp.json())
+            return True
+
+    def add_image(self, wsid, img_path):
+        path = f"submission/workspaceitems/{wsid}"
+
+        resp = requests.post(f"{self.url}/{path}",
+                             headers = {
+                                 "X-XSRF-TOKEN": self.xsrf_token,
+                                 "Authorization": self.auth,
+                                 "Content-Type": "multipart/form-data",
+                                 },
+                             cookies = { "DSPACE-XSRF-COOKIE": self.xsrf_cookie },
+                             files = {"file": (img_path, open(img_path, 'rb'), 'image/png') }
+                             )
+
+        if resp.status_code == 201:
+            match resp.json():
+                case { "id": wsid }:
+                    print(f"Added image '{img_path}' to id {wsid}")
+                    return wsid
+
+        print(f"Failed to add image '{img_path}' to id {wsid}: {resp.status_code}")
+        print(resp.text)
+
+        print()
+        for k, v in resp.request.headers.items(): print(k, v)
+        print()
+        print(resp.request.body)
+        print()
 
     def submit_workspace_item(self, wsitem):
-        path = f"workflow/workflowitems"
+        path = f"workflow/workflowitems?projection=full"
         data = f"{self.url}/submission/workspaceitems/{wsitem}"
 
         resp = requests.post(f"{self.url}/{path}",
@@ -190,15 +213,10 @@ class DSpaceAPI:
                              data = data)
 
         if resp.status_code == 201:
-            print(resp.json())
-            return
-#            match resp.json():
-#                case { "_embedded": { "item": { "uuid": uuid } }}:
-#                       print(f"Created workspace item with uuid {uuid}")
-#                       return uuid
+            print(f"Submitted item {wsitem}")
+            return True
 
         print(f"Failed to submit item {wsitem}: {resp.status_code}")
-        print(data)
         print(resp.text)
 
     """
@@ -245,5 +263,39 @@ class DSpaceAPI:
 
     # patch
 
-    def patch_item(self, wsitem, surname, forename):
-        pass
+    def patch_item(self, wsid, surname, forename):
+        path = f"submission/workspaceitems/{wsid}"
+
+        json = [
+            {
+                "op":    "add",
+                "path":  "/sections/personStep/person.familyName",
+                "value": [{ "value": surname }]
+            },
+            {
+                "op":    "add",
+                "path":  "/sections/personStep/person.givenName",
+                "value": [{ "value": forename }]
+            },
+            {
+                "op":    "add",
+                "path":  "/sections/license/granted",
+                "value": "true"
+            }
+        ]
+
+        resp = requests.patch(f"{self.url}/{path}",
+                             headers = {
+                                 "X-XSRF-TOKEN": self.xsrf_token,
+                                 "Authorization": self.auth,
+                                 "Content-Type": "application/json",
+                                 },
+                             cookies = { "DSPACE-XSRF-COOKIE": self.xsrf_cookie },
+                             json = json)
+
+        if resp.status_code == 200:
+            print(f"Patched workspace item {wsid} with '{surname}'")
+            return wsid
+
+        print(f"Failed to patch workspace item {wsid}: {resp.status_code}")
+        print(resp.text)
