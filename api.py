@@ -153,9 +153,9 @@ class DSpaceAPI:
 
         if resp.status_code == 201:
             match resp.json():
-                case { "id": wsid }:
-                    print(f"Created workspace item with id {wsid}")
-                    return wsid
+                case { "id": wsid, "_embedded": { "item": { "uuid": uuid }}}:
+                    print(f"Created workspace item with id {wsid} and uuid {uuid}")
+                    return wsid, uuid
 
         print(f"Failed to create item")
 
@@ -178,10 +178,10 @@ class DSpaceAPI:
                              headers = {
                                  "X-XSRF-TOKEN": self.xsrf_token,
                                  "Authorization": self.auth,
-                                 "Content-Type": "multipart/form-data",
+                                 # DO NOT include content-type header here!
                                  },
                              cookies = { "DSPACE-XSRF-COOKIE": self.xsrf_cookie },
-                             files = {"file": (img_path, open(img_path, 'rb'), 'image/png') }
+                             files = {"file": (img_path, open(img_path, 'rb').read(), 'image/png') }
                              )
 
         if resp.status_code == 201:
@@ -192,12 +192,6 @@ class DSpaceAPI:
 
         print(f"Failed to add image '{img_path}' to id {wsid}: {resp.status_code}")
         print(resp.text)
-
-        print()
-        for k, v in resp.request.headers.items(): print(k, v)
-        print()
-        print(resp.request.body)
-        print()
 
     def submit_workspace_item(self, wsitem):
         path = f"workflow/workflowitems?projection=full"
@@ -219,6 +213,53 @@ class DSpaceAPI:
         print(f"Failed to submit item {wsitem}: {resp.status_code}")
         print(resp.text)
 
+    def add_author_to_item(self, author, item):
+        path = f"core/items/{item}"
+
+        json = [
+            {
+                "op":    "add",
+                "path":  "/metadata/dspace.entity.type/-",
+                "value": { "value": "Publication" }
+            }
+        ]
+
+        resp = requests.patch(f"{self.url}/{path}",
+                             headers = {
+                                 "X-XSRF-TOKEN": self.xsrf_token,
+                                 "Authorization": self.auth,
+                                 "Content-Type": "application/json",
+                                 },
+                             cookies = { "DSPACE-XSRF-COOKIE": self.xsrf_cookie },
+                             json = json)
+
+        if resp.status_code != 200:
+            print(f"Failed to add Publication metadata to {item}: {resp.status_code}")
+            print(resp.text)
+            print(resp.request.body)
+            return
+
+        path = f"core/relationships?relationshipType=1"
+
+        resp = requests.post(f"{self.url}/{path}",
+                             headers = {
+                                 "X-XSRF-TOKEN": self.xsrf_token,
+                                 "Authorization": self.auth,
+                                 "Content-Type": "text/uri-list",
+                                 },
+                             cookies = { "DSPACE-XSRF-COOKIE": self.xsrf_cookie },
+                             data = 
+                                 f"http://localhost:8080/server/api/core/items/{item}\n" +
+                                 f"http://localhost:8080/server/api/core/items/{author}"
+                             )
+
+        if resp.status_code == 201:
+            print("Added relationship!")
+            return True
+
+        print(f"Failed to add relationship: {resp.status_code}")
+        print(resp.text)
+        
     """
     def create_collection(self, comm_uuid):
         json = {"name": COLLECTION,

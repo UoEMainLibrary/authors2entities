@@ -41,12 +41,21 @@ def create_entities(d, entity_coll):
     for comm, coll, item in yield_items(d):
         for author in item.authors:
             surname, forename = author.split(", ")
-            print()
-            if (wsitem := d.create_workspace_item(entity_coll)) is None: return
-#            if d.get_workspace_item_status(wsitem) is None: return
+
+            print(f"Item {item.uuid} has author {author}")
+
+            # check if author already exists!!!
+
+            if (ret := d.create_workspace_item(entity_coll)) is None: return
+
+            wsitem, author_uuid = ret
+
             if d.patch_item(wsitem, surname, forename) is None: return
             if d.add_image(wsitem, "black_pixel.png") is None: return
             if d.submit_workspace_item(wsitem) is None: return
+            if d.add_author_to_item(author_uuid, item.uuid) is None: return
+
+            return
 
 ##############################################################################
 
