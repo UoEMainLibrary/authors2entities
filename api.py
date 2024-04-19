@@ -22,6 +22,8 @@ class Item:
                 title = " ".join([ v["value"] for v in titles ])
                 return cls(uuid, title, [ author["value"] for author in authors ])
 
+    def __lt__(self, other): return self.title < other.title
+
 class DSpaceAPI:
     def __init__(self, host, port):
         self.host, self.port = host, port
@@ -91,7 +93,7 @@ class DSpaceAPI:
                 print(len(l))
 
     def get_items(self, coll_id):
-        ret, page = [], 0
+        ret, page, n = [], 0, -1
 
         while True:
             resp = requests.get(f"{self.url}/discover/search/objects?" +
@@ -335,7 +337,7 @@ class DSpaceAPI:
                              json = json)
 
         if resp.status_code == 200:
-            print(f"Patched workspace item {wsid} with '{surname}'")
+            print(f"Patched workspace item {wsid} with '{surname} {forename}'")
             return wsid
 
         print(f"Failed to patch workspace item {wsid}: {resp.status_code}")
