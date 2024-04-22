@@ -1,6 +1,8 @@
 from dataclasses import dataclass
 import requests, pprint, json
 
+##############################################################################
+
 @dataclass
 class Item:
     uuid:    str
@@ -23,6 +25,75 @@ class Item:
                 return cls(uuid, title, [ author["value"] for author in authors ])
 
     def __lt__(self, other): return self.title < other.title
+
+    def process(self, d, collection, authors):
+        print(f"\033[1;32m{self.title}\n  \033[1;33m{self.uuid}\033[0;37m")
+
+        for author in self.authors:
+            if author in authors:
+                author_uuid = authors[author]
+                if not d.add_author_to_item(author_uuid, self.uuid): exit(5)
+                print(f"Added  '{author}'  with id {author_uuid}")
+            else:
+                author_uuid = d.create_author_entity(collection, author)
+                if author_uuid is None: return False
+                if not d.add_author_to_item(author_uuid, self.uuid): exit(5)
+                print(f"Created '{author}' with id {author_uuid}")
+
+        return True
+
+@dataclass
+class Author:
+    uuid:     str
+    surname:  str
+    forename: str
+
+    @classmethod
+    def from_json(cls, json):
+        match json:
+            case { "_embedded": {
+                    "indexableObject": {
+                        "id": uuid, "metadata": {
+                            "person.familyName": surname,
+                            "person.givenName": forename,
+                        }
+                      }
+                    }
+                  }:
+                sn = " ".join([ v["value"] for v in surname ])
+                fn = " ".join([ v["value"] for v in forename ])
+
+                return cls(uuid, sn, fn)
+
+    def __lt__(self, other): return self.title < other.title
+
+    @property
+    def fullname(self): return f"{self.surname}, {self.forename}"
+
+##############################################################################
+
+@dataclass
+class Community:
+    name: str
+    uuid: str
+
+    @classmethod
+    def from_json(cls, json):
+        match json:
+            case { "name": name, "uuid": uuid }: return cls(name, uuid)
+
+@dataclass
+class Collection:
+    name: str
+    uuid: str
+    community: Community
+
+    @classmethod
+    def from_json(cls, json, comm):
+        match json:
+            case { "name": name, "uuid": uuid }: return cls(name, uuid, comm)
+
+##############################################################################
 
 class DSpaceAPI:
     def __init__(self, host, port):
@@ -60,49 +131,42 @@ class DSpaceAPI:
 
     def get_all_communities(self):
         resp = requests.get(f"{self.url}/core/communities")
-        ret = []
 
         match resp.json():
             case { "_embedded": { "communities": l } }:
-                for c in l:
-                    match c:
-                        case { "name": name, "uuid": uuid }:
-                            ret.append((name, uuid))
+                return [ Community.from_json(c) for c in l ]
 
-        return ret
+        return []
 
-    def get_collections(self, comm_id):
-        resp = requests.get(f"{self.url}/core/communities/{comm_id}/collections")
-        ret = []
+    def get_collections(self, comm):
+        resp = requests.get(f"{self.url}/core/communities/{comm.uuid}/collections")
 
         match resp.json():
             case { "_embedded": { "collections": l } }:
-                for c in l:
-                    match c:
-                        case { "name": name, "uuid": uuid }:
-                            ret.append((name, uuid))
+                return [ Collection.from_json(c, comm) for c in l ]
 
-        return ret
+        return []
 
-    def get_mapped_items(self, coll_id):
-        resp = requests.get(f"{self.url}/core/collections/{coll_id}/mappedItems")
+    def get_mapped_items(self, coll):
+        resp = requests.get(f"{self.url}/core/collections/{coll.uuid}/mappedItems")
         ret = []
 
         match resp.json():
             case { "_embedded": { "mappedItems": l } }:
                 print(len(l))
 
-    def get_items(self, coll_id):
+    def get_items(self, coll, cls):
         ret, page, n = [], 0, -1
 
         while True:
             resp = requests.get(f"{self.url}/discover/search/objects?" +
-                                f"sort=dc.date.accessioned,DESC&page={page}&size=20" +
-                                f"&scope={coll_id}&dsoType=ITEM")
+                                f"sort=dc.title&page={page}&size=20" +
+                                f"&scope={coll.uuid}&dsoType=ITEM")
+
             match resp.json():
                 case { "_embedded": { "searchResult": { "_embedded": { "objects": objects },
                                                         "page": { "totalPages": n } } } }:
-                    ret += [ Item.from_json(obj) for obj in objects ]
+                    ret += [ cls.from_json(obj) for obj in objects ]
 
             page += 1
             if page >= n: break
@@ -141,8 +205,8 @@ class DSpaceAPI:
 
     # create
 
-    def create_workspace_item(self, coll_uuid):
-        path = f"submission/workspaceitems?owningCollection={coll_uuid}"
+    def create_workspace_item(self, collection):
+        path = f"submission/workspaceitems?owningCollection={collection.uuid}"
 
         resp = requests.post(f"{self.url}/{path}",
                              headers = {
@@ -155,11 +219,11 @@ class DSpaceAPI:
 
         if resp.status_code == 201:
             match resp.json():
-                case { "id": wsid, "_embedded": { "item": { "uuid": uuid }}}:
-                    print(f"Created workspace item with id {wsid} and uuid {uuid}")
-                    return wsid, uuid
+                case { "id": wsitem, "_embedded": { "item": { "uuid": uuid }}}:
+                    return wsitem, uuid
 
         print(f"Failed to create item")
+        print(resp)
 
     def get_workspace_item_status(self, wsitem):
         resp = requests.get(f"{self.url}/submission/workspaceitems/{wsitem}",
@@ -170,11 +234,10 @@ class DSpaceAPI:
                              cookies = { "DSPACE-XSRF-COOKIE": self.xsrf_cookie },
                             )
 
-        if resp.status_code == 200:
-            return True
+        if resp.status_code == 200: return True
 
-    def add_image(self, wsid, img_path):
-        path = f"submission/workspaceitems/{wsid}"
+    def add_image(self, wsitem, img_path):
+        path = f"submission/workspaceitems/{wsitem}"
 
         resp = requests.post(f"{self.url}/{path}",
                              headers = {
@@ -188,11 +251,9 @@ class DSpaceAPI:
 
         if resp.status_code == 201:
             match resp.json():
-                case { "id": wsid }:
-                    print(f"Added image '{img_path}' to id {wsid}")
-                    return wsid
+                case { "id": wsitem }: return wsitem
 
-        print(f"Failed to add image '{img_path}' to id {wsid}: {resp.status_code}")
+        print(f"Failed to add image '{img_path}' to id {wsitem}: {resp.status_code}")
         print(resp.text)
 
     def submit_workspace_item(self, wsitem):
@@ -208,9 +269,7 @@ class DSpaceAPI:
                              cookies = { "DSPACE-XSRF-COOKIE": self.xsrf_cookie },
                              data = data)
 
-        if resp.status_code == 201:
-            print(f"Submitted item {wsitem}")
-            return True
+        if resp.status_code == 201: return True
 
         print(f"Failed to submit item {wsitem}: {resp.status_code}")
         print(resp.text)
@@ -255,13 +314,23 @@ class DSpaceAPI:
                                  f"http://localhost:8080/server/api/core/items/{author}"
                              )
 
-        if resp.status_code == 201:
-            print("Added relationship!")
-            return True
+        if resp.status_code == 201: return True
 
         print(f"Failed to add relationship: {resp.status_code}")
         print(resp.text)
         
+    def create_author_entity(self, collection, author):
+        if (ret := self.create_workspace_item(collection)) is None: return
+
+        wsitem, author_uuid = ret
+        surname, forename = author.split(", ")
+
+        if self.patch_item(wsitem, surname, forename) is None: return
+        if self.add_image(wsitem, "black_pixel.png") is None: return
+        if self.submit_workspace_item(wsitem) is None: return
+
+        return author_uuid
+
     """
     def create_collection(self, comm_uuid):
         json = {"name": COLLECTION,
@@ -306,8 +375,8 @@ class DSpaceAPI:
 
     # patch
 
-    def patch_item(self, wsid, surname, forename):
-        path = f"submission/workspaceitems/{wsid}"
+    def patch_item(self, wsitem, surname, forename):
+        path = f"submission/workspaceitems/{wsitem}"
 
         json = [
             {
@@ -336,9 +405,9 @@ class DSpaceAPI:
                              cookies = { "DSPACE-XSRF-COOKIE": self.xsrf_cookie },
                              json = json)
 
-        if resp.status_code == 200:
-            print(f"Patched workspace item {wsid} with '{surname} {forename}'")
-            return wsid
+        if resp.status_code == 200: return wsitem
 
-        print(f"Failed to patch workspace item {wsid}: {resp.status_code}")
+        print(f"Failed to patch workspace item {wsitem}: {resp.status_code}")
         print(resp.text)
+
+##############################################################################
