@@ -62,13 +62,51 @@ Reloading
 
 docker cp database_dump.sql dspacedb:/
 docker exec -ti dspacedb /bin/bash
-dropdb -U dspace dspace -f
-createdb -U dspace dspace
-psql -U dspace -d dspace < database_dump.sql
+  dropdb -U dspace dspace -f
+  createdb -U dspace dspace
+  psql -U dspace -d dspace < database_dump.sql
 
 docker exec -ti dspace /bin/bash
-/dspace/bin/dspace index-discovery -b
+  /dspace/bin/dspace index-discovery -b
+  /dspace/bin/dspace create-administrator
+
+##############################################################################
+
+Cleaning database
+-----------------
+
+docker exec -ti dspacedb /bin/bash
+  dropdb -U dspace dspace -f
+  createdb -U dspace dspace
+  psql -U dspace
+    create extension pgcrypto;
+
+docker exec -ti dspace /bin/bash
+  /dspace/bin/dspace database migrate
+  /dspace/bin/dspace index-discovery -b
+  /dspace/bin/dspace create-administrator
+  /dspace/bin/dspace initialize-entities -f /dspace/config/entities/relationship-types.xml
+  /dspace/bin/dspace index-authority
+ 
+##############################################################################
+
+Cleaning database (old)
+-----------------
+
+docker exec -ti dspace /bin/bash
+cd /dspace/bin/
+./dspace database clean
+
+or
+
+create extension pgcrypto  as above
+/dspace/bin/dspace database migrate
 /dspace/bin/dspace create-administrator
+
+
+to dump:
+
+pg_dump -U [db_username] [db_name] > [database_dump.sql]
 
 ##############################################################################
 

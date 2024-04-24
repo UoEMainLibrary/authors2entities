@@ -22,6 +22,7 @@ collections, authors, entity_coll = [], None, None
 
 for comm in d.get_all_communities(): collections += d.get_collections(comm)
 
+"""
 for coll in collections:
     if coll.name == COLLECTION and coll.community.name == COMMUNITY:
         authors = { item.fullname: item.uuid for item in d.get_items(coll, Author) }
@@ -30,16 +31,18 @@ for coll in collections:
 if authors is None:
     print("Unable to get authors")
     exit(3)
+"""
 
 for collection in collections:
     if collection.name == COLLECTION and coll.community.name == COMMUNITY: continue
 
     print(f"\033[1;44;33m{collection.community.name}  \033[1;45;37m{collection.name}\033[0;40m")
 
-    for item in d.get_items(collection, Item)[:1]:
-        if not item.process(d, entity_coll, authors): exit(4)
+    print(len(d.get_items(collection, Item)))
+#    for item in d.get_items(collection, Item)[:1]:
+#        if not item.process(d, entity_coll, authors): exit(4)
 
-    break
+#    break
 
 """
 What should happen
