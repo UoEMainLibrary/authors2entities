@@ -27,18 +27,30 @@ class Item:
     def __lt__(self, other): return self.title < other.title
 
     def process(self, d, collection, authors):
+        # FIXME: identify if item already has links to authors
+        # i.e. if item's type is Publication
         print(f"\033[1;32m{self.title}\n  \033[1;33m{self.uuid}\033[0;37m")
 
         for author in self.authors:
             if author in authors:
                 author_uuid = authors[author]
-                if not d.add_author_to_item(author_uuid, self.uuid): exit(5)
+                if not d.add_author_to_item(author_uuid, self.uuid): return False
+
                 print(f"Added  '{author}'  with id {author_uuid}")
             else:
                 author_uuid = d.create_author_entity(collection, author)
                 if author_uuid is None: return False
-                if not d.add_author_to_item(author_uuid, self.uuid): exit(5)
+                if not d.add_author_to_item(author_uuid, self.uuid): return False
+
                 print(f"Created '{author}' with id {author_uuid}")
+
+        # FIXME
+
+        # - remove all old author metadata
+        # - remove all but one Entity Type
+
+        # PATCH op = "remove" path = /metadata/dc.contributor.author/N
+        #                            /metadata/dspace.entity.type/N
 
         return True
 
@@ -173,36 +185,6 @@ class DSpaceAPI:
 
         return [ obj for obj in ret if obj is not None ]
 
-    # find
-
-    def find_community(self, comm_name):
-        resp = requests.get(f"{self.url}/core/communities/search/top")
-
-        if resp.status_code == 200:
-            match resp.json():
-                case { "_embedded": { "communities": l } }:
-                    for c in l:
-                        match c:
-                            case { "name": name, "uuid": uuid } if name == comm_name:
-                                print(f"Found community '{name}' with uuid {uuid}")
-                                return uuid
-
-            print(f"Community '{comm_name}' does not exist")
-
-    def find_collection(self, comm_uuid, coll_name):
-        resp = requests.get(f"{self.url}/core/communities/{comm_uuid}/collections")
-
-        if resp.status_code == 200:
-            match resp.json():
-                case { "_embedded": { "collections": l } }:
-                    for c in l:
-                        match c:
-                            case { "name": name, "uuid": uuid } if name == coll_name:
-                                print(f"Found collection '{name}' with uuid {uuid}")
-                                return uuid
-
-        print(f"Collection '{coll_name}' does not exist")
-
     # create
 
     def create_workspace_item(self, collection):
@@ -331,24 +313,33 @@ class DSpaceAPI:
 
         return author_uuid
 
-    """
-    def create_collection(self, comm_uuid):
-        json = {"name": COLLECTION,
-                "metadata":{"dc.title":[
-                    {"language":None,"value": COLLECTION,
-                     "authority":None,"confidence": -1}]}
+    def create_collection(self, comm_uuid, name):
+        json = {"name": name,
+                "metadata":
+                  {
+                      "dc.title": [
+                          {
+                              "language":None,
+                              "value": name,
+                              "authority":None,"confidence": -1
+                          }],
+                      "dspace.entity.type": [ { "value": "Person" } ],
+                   }
                 }
 
         if resp := self.post(f"core/collections?parent={comm_uuid}",
                              { "Authorization": self.auth },
                              json = json):
             uuid = resp.json()["uuid"]
-            print(f"Created collection with uuid {uuid}")
+            print(f"Created collection '{name}'with uuid {uuid}")
             return uuid
 
-    def create_community(self):
-        json = {"type": {"value":COMMUNITY},
-                "metadata":{"dc.title":[{"language":None,"value": COMMUNITY}],
+        print(f"Failed to create collection '{name}': {resp.status_code}")
+        print(resp.text)
+
+    def create_community(self, name):
+        json = {"type": {"value": name},
+                "metadata":{"dc.title":[{"language":None,"value": name}],
                             "dc.description":[{"language":None}],
                             "dc.description.abstract":[{"language":None}],
                             "dc.rights":[{"language":None}],
@@ -358,9 +349,11 @@ class DSpaceAPI:
                              { "Authorization": self.auth },
                              json = json):
             uuid = resp.json()["uuid"]
-            print(f"Created community with uuid {uuid}")
+            print(f"Created community '{name}' with uuid {uuid}")
             return uuid
-    """
+
+        print(f"Failed to create community '{name}': {resp.status_code}")
+        print(resp.text)
 
     # delete
 

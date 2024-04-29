@@ -1,4 +1,4 @@
-from api import DSpaceAPI, Author, Item
+from api import *
 
 import csv
 
@@ -22,33 +22,23 @@ collections, authors, entity_coll = [], None, None
 
 for comm in d.get_all_communities(): collections += d.get_collections(comm)
 
-"""
 for coll in collections:
     if coll.name == COLLECTION and coll.community.name == COMMUNITY:
         authors = { item.fullname: item.uuid for item in d.get_items(coll, Author) }
         entity_coll = coll
 
 if authors is None:
-    print("Unable to get authors")
-    exit(3)
-"""
+    if (comm_uuid := d.create_community(COMMUNITY)) is None: exit(3)
+    if (coll_uuid := d.create_collection(comm_uuid, COLLECTION)) is None: exit(4)
+
+    authors     = {}
+    comm        = Community(COMMUNITY, comm_uuid)
+    entity_coll = Collection(COLLECTION, coll_uuid, comm)
 
 for collection in collections:
-    if collection.name == COLLECTION and coll.community.name == COMMUNITY: continue
+    if collection.name == COLLECTION and collection.community.name == COMMUNITY: continue
 
     print(f"\033[1;44;33m{collection.community.name}  \033[1;45;37m{collection.name}\033[0;40m")
 
-    print(len(d.get_items(collection, Item)))
-#    for item in d.get_items(collection, Item)[:1]:
-#        if not item.process(d, entity_coll, authors): exit(4)
-
-#    break
-
-"""
-What should happen
-==================
-
-- Loop over items one-by-one
-- - Get linked authors for item
-- - Create and link new author where needed
-"""
+    for item in d.get_items(collection, Item)[:1]:
+        if not item.process(d, entity_coll, authors): exit(5)

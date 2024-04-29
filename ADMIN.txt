@@ -87,7 +87,7 @@ docker exec -ti dspace /bin/bash
   /dspace/bin/dspace create-administrator
   /dspace/bin/dspace initialize-entities -f /dspace/config/entities/relationship-types.xml
   /dspace/bin/dspace index-authority
- 
+
 ##############################################################################
 
 Cleaning database (old)
