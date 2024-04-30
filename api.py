@@ -44,13 +44,11 @@ class Item:
 
                 print(f"Created '{author}' with id {author_uuid}")
 
-        # FIXME
+        if (places := d.get_item(self.uuid)) is None: return False
 
-        # - remove all old author metadata
-        # - remove all but one Entity Type
+        type_places, auth_places = places
 
-        # PATCH op = "remove" path = /metadata/dc.contributor.author/N
-        #                            /metadata/dspace.entity.type/N
+        if not d.patch_item(self.uuid, type_places, auth_places): return False
 
         return True
 
@@ -185,6 +183,27 @@ class DSpaceAPI:
 
         return [ obj for obj in ret if obj is not None ]
 
+    def get_item(self, uuid):
+        resp = requests.get(f"{self.url}/core/items/{uuid}",
+                             headers = {
+                                 "X-XSRF-TOKEN": self.xsrf_token,
+                                 "Authorization": self.auth,
+                                 },
+                             cookies = { "DSPACE-XSRF-COOKIE": self.xsrf_cookie },
+                            )
+
+        if resp.status_code == 200:
+            match resp.json():
+                case { "metadata": { "dspace.entity.type": etype,
+                                     "dc.contributor.author": authors } }:
+                    type_places = len(etype)
+                    auth_places = [ h["place"] for h in authors
+                                    if h["authority"][:7] != "virtual" ]
+                    return type_places, auth_places
+
+        print("Failed to get item metadata")
+        return False
+
     # create
 
     def create_workspace_item(self, collection):
@@ -307,7 +326,7 @@ class DSpaceAPI:
         wsitem, author_uuid = ret
         surname, forename = author.split(", ")
 
-        if self.patch_item(wsitem, surname, forename) is None: return
+        if self.patch_author(wsitem, surname, forename) is None: return
         if self.add_image(wsitem, "black_pixel.png") is None: return
         if self.submit_workspace_item(wsitem) is None: return
 
@@ -368,7 +387,7 @@ class DSpaceAPI:
 
     # patch
 
-    def patch_item(self, wsitem, surname, forename):
+    def patch_author(self, wsitem, surname, forename):
         path = f"submission/workspaceitems/{wsitem}"
 
         json = [
@@ -401,6 +420,33 @@ class DSpaceAPI:
         if resp.status_code == 200: return wsitem
 
         print(f"Failed to patch workspace item {wsitem}: {resp.status_code}")
+        print(resp.text)
+
+    def patch_item(self, uuid, type_places, auth_places):
+        path = f"core/items/{uuid}"
+
+        json = [ { "op": "remove", "path": f"/metadata/dc.contributor.author/{n}" }
+                 for n in auth_places ] + [
+                { "op": "remove", "path": f"/metadata/dspace.entity.type/{1 + n}" }
+                 for n in range(type_places - 1)
+                ]
+
+        json = list(reversed(json))
+        
+        resp = requests.patch(f"{self.url}/{path}",
+                             headers = {
+                                 "X-XSRF-TOKEN": self.xsrf_token,
+                                 "Authorization": self.auth,
+                                 "Content-Type": "application/json",
+                                 },
+                             cookies = { "DSPACE-XSRF-COOKIE": self.xsrf_cookie },
+                             json = json)
+
+        if resp.status_code == 200:
+#            pprint.pprint(resp.json()["metadata"])
+            return True
+
+        print(f"Failed to patch item {uuid}: {resp.status_code}")
         print(resp.text)
 
 ##############################################################################

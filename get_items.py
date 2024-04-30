@@ -40,5 +40,7 @@ for collection in collections:
 
     print(f"\033[1;44;33m{collection.community.name}  \033[1;45;37m{collection.name}\033[0;40m")
 
-    for item in d.get_items(collection, Item)[:1]:
+    for item in d.get_items(collection, Item):
         if not item.process(d, entity_coll, authors): exit(5)
+
+#    break
