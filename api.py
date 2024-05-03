@@ -221,7 +221,9 @@ class DSpaceAPI:
         if (ret := self.create_workspace_item(collection)) is None: return
 
         wsitem, author_uuid = ret
-        surname, forename = author.split(", ")
+
+        if ", " in author: surname, forename = author.split(", ", 1)
+        else:              surname, forename = author, ""
 
         if self.patch_author(wsitem, surname, forename) is None: return
         if self.add_image(wsitem, "black_pixel.png") is None: return

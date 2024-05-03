@@ -22,8 +22,10 @@ for comm in d.get_all_communities(): collections += d.get_collections(comm)
 
 for coll in collections:
     if coll.name == COLLECTION and coll.community.name == COMMUNITY:
+        print("Reading existing authors...")
         authors = { item.fullname: item.uuid for item in d.get_items(coll, Author) }
         entity_coll = coll
+        print(f"Read {len(authors)}")
 
 if authors is None:
     if (comm_uuid := d.create_community(COMMUNITY)) is None: exit(3)
@@ -41,6 +43,6 @@ for collection in collections:
     items = d.get_items(collection, Item)
     n = len(items)
 
-    for i, item in enumerate(items):
+    for i, item in enumerate(items[:100]):
         print(f"\nItem {i + 1} of {n}")
         if not item.process(d, entity_coll, authors): exit(5)
