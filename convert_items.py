@@ -1,7 +1,5 @@
 from api import *
 
-import csv
-
 HOST = "localhost"
 PORT = "8080"
 USER = "root%40localhost"
@@ -43,6 +41,6 @@ for collection in collections:
     items = d.get_items(collection, Item)
     n = len(items)
 
-    for i, item in enumerate(items[:100]):
+    for i, item in enumerate(items):
         print(f"\nItem {i + 1} of {n}")
         if not item.process(d, entity_coll, authors): exit(5)

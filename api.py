@@ -54,6 +54,32 @@ class DSpaceAPI:
 
         return []
 
+    def find_community(self, comm_name):
+        resp = requests.get(f"{self.url}/core/communities/search/top")
+
+        if resp.status_code == 200:
+            match resp.json():
+                case { "_embedded": { "communities": l } }:
+                    for c in l:
+                        match c:
+                            case { "name": name, "uuid": uuid } if name == comm_name:
+                                return Community(name, uuid)
+
+            print(f"Community '{comm_name}' does not exist")
+
+    def find_collection(self, comm, coll_name):
+        resp = requests.get(f"{self.url}/core/communities/{comm.uuid}/collections")
+
+        if resp.status_code == 200:
+            match resp.json():
+                case { "_embedded": { "collections": l } }:
+                    for c in l:
+                        match c:
+                            case { "name": name, "uuid": uuid } if name == coll_name:
+                                return Collection(name, uuid, comm)
+
+        print(f"Collection '{coll_name}' does not exist")
+
     def get_mapped_items(self, coll):
         resp = requests.get(f"{self.url}/core/collections/{coll.uuid}/mappedItems")
         ret = []
@@ -347,5 +373,43 @@ class DSpaceAPI:
 
         print(f"Failed to patch item {uuid}: {resp.status_code}")
         print(resp.text)
+
+    # other
+
+    def absorb_author(self, new, old):
+        resp = requests.get(f"{self.url}/core/items/{old}/relationships",
+                             headers = {
+                                 "X-XSRF-TOKEN": self.xsrf_token,
+                                 "Authorization": self.auth,
+                                 },
+                             cookies = { "DSPACE-XSRF-COOKIE": self.xsrf_cookie },
+                            )
+        if resp.status_code == 200:
+            match resp.json():
+                case { "_embedded": { "relationships": rels } }:
+                    for rel in rels:
+                        match rel:
+                            case { "_links": { "leftItem": { "href": left },
+                                               "rightItem": { "href": right }, },
+                                   "id": rel_id }:
+                                self.transfer_relationships(old, new, rel_id, left, right)
+            return True
+
+        print(f"Could not find relationships for author {old}: {resp.status_code}")
+        print(resp.text)
+
+    def transfer_relationships(self, old, new, rel_id, left, right):
+        print(old)
+        print(new)
+        print(rel_id)
+        print(left)
+        print(right)
+
+        if 
+
+#PUT /api/core/relationships/<:id>/<:leftVsRightItem>
+# curl -i -X PUT 'https://demo.dspace.org/server/api/core/relationships/891/leftItem' -H 'Authorization: Bearer eyJhbGciO…' -H "Content-Type:text/uri-list" --data 'https://demo.dspace.org/server/api/core/items/12623672-25a9-4df2-ab36-699c4c240c7e'
+
+# and delete old author
 
 ##############################################################################
