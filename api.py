@@ -80,14 +80,6 @@ class DSpaceAPI:
 
         print(f"Collection '{coll_name}' does not exist")
 
-    def get_mapped_items(self, coll):
-        resp = requests.get(f"{self.url}/core/collections/{coll.uuid}/mappedItems")
-        ret = []
-
-        match resp.json():
-            case { "_embedded": { "mappedItems": l } }:
-                print(len(l))
-
     def get_items(self, coll, cls):
         ret, page, n = [], 0, -1
 
@@ -384,6 +376,7 @@ class DSpaceAPI:
                                  },
                              cookies = { "DSPACE-XSRF-COOKIE": self.xsrf_cookie },
                             )
+
         if resp.status_code == 200:
             match resp.json():
                 case { "_embedded": { "relationships": rels } }:
@@ -399,17 +392,41 @@ class DSpaceAPI:
         print(resp.text)
 
     def transfer_relationships(self, old, new, rel_id, left, right):
-        print(old)
-        print(new)
-        print(rel_id)
-        print(left)
-        print(right)
+        if   left.endswith(old):  s = "leftItem"
+        elif right.endswith(old): s = "rightItem"
+        else:
+            print(f"uuid mismatch in relationship {rel_id}")
+            return
 
-        if 
+        resp = requests.put(f"{self.url}/core/relationships/{rel_id}/{s}",
+                            headers = {
+                                "X-XSRF-TOKEN": self.xsrf_token,
+                                "Authorization": self.auth,
+                                "Content-Type": "text/uri-list"
+                            },
+                            cookies = { "DSPACE-XSRF-COOKIE": self.xsrf_cookie },
+                            data = f"{self.url}/core/items/{new}"
+                            )
 
-#PUT /api/core/relationships/<:id>/<:leftVsRightItem>
-# curl -i -X PUT 'https://demo.dspace.org/server/api/core/relationships/891/leftItem' -H 'Authorization: Bearer eyJhbGciO…' -H "Content-Type:text/uri-list" --data 'https://demo.dspace.org/server/api/core/items/12623672-25a9-4df2-ab36-699c4c240c7e'
+        if resp.status_code != 200:
+            print(f"Failed to update relationship {rel_id}: {resp.status_code}")
+            print(resp.text)
+            return
 
-# and delete old author
+        print(f"    {old} is now {new} in {rel_id}")
+
+        resp = requests.delete(f"{self.url}/core/items/{old}",
+                            headers = {
+                                "X-XSRF-TOKEN": self.xsrf_token,
+                                "Authorization": self.auth,
+                                "Content-Type": "text/uri-list"
+                            },
+                            cookies = { "DSPACE-XSRF-COOKIE": self.xsrf_cookie })
+
+        match resp.status_code:
+            case 204: print("    Delete old author succeeded")
+            case 401: print("Delete old author failed: not authorised")
+            case 403: print("Delete old author failed: not permitted")
+            case 404: print("Delete old author failed: not found")
 
 ##############################################################################

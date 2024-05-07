@@ -4,7 +4,7 @@ then
     exit 1
 fi
 
-docker cp $1 dspacedb:/db.sql
+docker cp "dumps/$1.sql" dspacedb:/db.sql
 docker exec dspacedb /bin/bash -c "dropdb -U dspace dspace -f"
 docker exec dspacedb /bin/bash -c "createdb -U dspace dspace"
 docker exec dspacedb /bin/bash -c "psql -U dspace -d dspace < db.sql"
