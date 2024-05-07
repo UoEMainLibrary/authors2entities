@@ -18,6 +18,11 @@ collections, authors, entity_coll = [], None, None
 
 for comm in d.get_all_communities(): collections += d.get_collections(comm)
 
+# FIXME!!!!!
+#
+# - Get rid of authors dict; use d.get_author_uuid instead
+# - Use d.find_community and d.find_collection
+
 for coll in collections:
     if coll.name == COLLECTION and coll.community.name == COMMUNITY:
         print("Reading existing authors...")

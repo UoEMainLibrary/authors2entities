@@ -119,6 +119,32 @@ class DSpaceAPI:
         print("Failed to get item metadata")
         return False
 
+    def get_author_uuid(self, coll_uuid, name):
+        params = { "scope": coll_uuid,
+                   "f.entityType": f"Person,equals",
+                   "f.title": f"{name},contains"
+                  }
+
+        resp = requests.get(f"{self.url}/discover/search/objects",
+                             headers = {
+                                 "X-XSRF-TOKEN": self.xsrf_token,
+                                 "Authorization": self.auth,
+                                 },
+                             cookies = { "DSPACE-XSRF-COOKIE": self.xsrf_cookie },
+                             params = params
+                            )
+
+        if resp.status_code == 200:
+            match resp.json():
+                case { "_embedded": { "searchResult": { "_embedded": {
+                        "objects": [ ret, *rest ] } }
+                                     } }:
+                    match ret:
+                        case { "_embedded": { "indexableObject": { "id": uuid } } }:
+                            return uuid
+
+        print(f"Could not find uuid for author '{name}'")
+
     # create
 
     def create_workspace_item(self, collection):
@@ -243,9 +269,10 @@ class DSpaceAPI:
         if ", " in author: surname, forename = author.split(", ", 1)
         else:              surname, forename = author, ""
 
-        if self.patch_author(wsitem, surname, forename) is None: return
+        if self.patch_workspace_item(wsitem, surname, forename) is None: return
         if self.add_image(wsitem, "black_pixel.png") is None: return
         if self.submit_workspace_item(wsitem) is None: return
+        if self.patch_author(author_uuid, author) is None: return
 
         return author_uuid
 
@@ -304,7 +331,7 @@ class DSpaceAPI:
 
     # patch
 
-    def patch_author(self, wsitem, surname, forename):
+    def patch_workspace_item(self, wsitem, surname, forename):
         path = f"submission/workspaceitems/{wsitem}"
 
         json = [
@@ -359,9 +386,32 @@ class DSpaceAPI:
                              cookies = { "DSPACE-XSRF-COOKIE": self.xsrf_cookie },
                              json = json)
 
-        if resp.status_code == 200:
-#            pprint.pprint(resp.json()["metadata"])
-            return True
+        if resp.status_code == 200: return True
+
+        print(f"Failed to patch item {uuid}: {resp.status_code}")
+        print(resp.text)
+
+    def patch_author(self, uuid, name):
+        path = f"core/items/{uuid}"
+
+        json = [
+            {
+                "op":    "add",
+                "path":  "/metadata/dc.title/-",
+                "value":  [{ "value": name }]
+            },
+        ]
+        
+        resp = requests.patch(f"{self.url}/{path}",
+                             headers = {
+                                 "X-XSRF-TOKEN": self.xsrf_token,
+                                 "Authorization": self.auth,
+                                 "Content-Type": "application/json",
+                                 },
+                             cookies = { "DSPACE-XSRF-COOKIE": self.xsrf_cookie },
+                             json = json)
+
+        if resp.status_code == 200: return True
 
         print(f"Failed to patch item {uuid}: {resp.status_code}")
         print(resp.text)
