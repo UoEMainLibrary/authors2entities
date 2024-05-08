@@ -28,7 +28,7 @@ class Item:
 
     def __lt__(self, other): return self.title < other.title
 
-    def process(self, d, collection, authors):
+    def process(self, d, collection):
         print(f"\033[1;32m{self.uuid} '\033[33m{self.title}\033[0;37m'")
 
         for a, auth in self.authors:
@@ -40,18 +40,16 @@ class Item:
 
             if a != author: print(f"\033[32mConverted\033[37m' {a}' to '{author}'")
 
-            if author in authors:
-                author_uuid = authors[author]
-                if not d.add_author_to_item(author_uuid, self.uuid): return False
-
-                print(f"\033[36mAdded\033[37m '{author}'  with id {author_uuid}")
+            if (author_uuid := d.get_author_uuid(collection, author)) is not None:
+                s = f"\033[36mAdded\033[37m"
+            elif (author_uuid := d.create_author_entity(collection, author)) is not None:
+                s = f"\033[33mCreated\033[37m"
             else:
-                author_uuid = d.create_author_entity(collection, author)
-                if author_uuid is None: return False
-                if not d.add_author_to_item(author_uuid, self.uuid): return False
-                authors[author] = author_uuid
+                return False
+                
+            if not d.add_author_to_item(author_uuid, self.uuid): return False
 
-                print(f"\033[33mCreated\033[37m '{author}' with id {author_uuid}")
+            print(f"{s} '{author}'  with id {author_uuid}")
 
         if (places := d.get_item(self.uuid)) is None: return False
 

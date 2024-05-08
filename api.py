@@ -11,19 +11,12 @@ class DSpaceAPI:
     def options(self):
         resp = requests.options(self.url)
 
-        if resp.status_code != 200:
-            print("Failed to set options")
-            return False
+        if resp.status_code == 200:
+            self.xsrf_cookie = resp.cookies["DSPACE-XSRF-COOKIE"]
+            self.xsrf_token  = resp.headers["DSPACE-XSRF-TOKEN"]
+            return True
 
-        self.xsrf_cookie = resp.cookies["DSPACE-XSRF-COOKIE"]
-        self.xsrf_token  = resp.headers["DSPACE-XSRF-TOKEN"]
-        return True
-
-    def post(self, path, headers, **opts):
-        return requests.post(f"{self.url}/{path}",
-                             headers = { "X-XSRF-TOKEN": self.xsrf_token, **headers },
-                             cookies = { "DSPACE-XSRF-COOKIE": self.xsrf_cookie },
-                             **opts)
+        print("Failed to set options")
 
     def login(self, user, password):
         if resp := self.post("authn/login",
@@ -34,9 +27,16 @@ class DSpaceAPI:
 
         print("Failed to log in")
 
+    @classmethod
+    def start(cls, host, port, user, password):
+        d = cls(host, port)
+        if d.options() is None: return
+        if d.login(user, password) is None: return
+        return d
+
     # get
 
-    def get_all_communities(self):
+    def get_communities(self):
         resp = requests.get(f"{self.url}/core/communities")
 
         match resp.json():
@@ -54,6 +54,11 @@ class DSpaceAPI:
 
         return []
 
+    def yield_collections(self):
+        for comm in self.get_communities():
+            for coll in self.get_collections(comm):
+                yield coll
+
     def find_community(self, comm_name):
         resp = requests.get(f"{self.url}/core/communities/search/top")
 
@@ -65,8 +70,6 @@ class DSpaceAPI:
                             case { "name": name, "uuid": uuid } if name == comm_name:
                                 return Community(name, uuid)
 
-            print(f"Community '{comm_name}' does not exist")
-
     def find_collection(self, comm, coll_name):
         resp = requests.get(f"{self.url}/core/communities/{comm.uuid}/collections")
 
@@ -77,8 +80,6 @@ class DSpaceAPI:
                         match c:
                             case { "name": name, "uuid": uuid } if name == coll_name:
                                 return Collection(name, uuid, comm)
-
-        print(f"Collection '{coll_name}' does not exist")
 
     def get_items(self, coll, cls):
         ret, page, n = [], 0, -1
@@ -119,8 +120,8 @@ class DSpaceAPI:
         print("Failed to get item metadata")
         return False
 
-    def get_author_uuid(self, coll_uuid, name):
-        params = { "scope": coll_uuid,
+    def get_author_uuid(self, coll, name):
+        params = { "scope": coll.uuid,
                    "f.entityType": f"Person,equals",
                    "f.title": f"{name},contains"
                   }
@@ -143,9 +144,24 @@ class DSpaceAPI:
                         case { "_embedded": { "indexableObject": { "id": uuid } } }:
                             return uuid
 
-        print(f"Could not find uuid for author '{name}'")
+    def get_workspace_item_status(self, wsitem):
+        resp = requests.get(f"{self.url}/submission/workspaceitems/{wsitem}",
+                             headers = {
+                                 "X-XSRF-TOKEN": self.xsrf_token,
+                                 "Authorization": self.auth,
+                                 },
+                             cookies = { "DSPACE-XSRF-COOKIE": self.xsrf_cookie },
+                            )
+
+        if resp.status_code == 200: return True
 
     # create
+
+    def post(self, path, headers, **opts):
+        return requests.post(f"{self.url}/{path}",
+                             headers = { "X-XSRF-TOKEN": self.xsrf_token, **headers },
+                             cookies = { "DSPACE-XSRF-COOKIE": self.xsrf_cookie },
+                             **opts)
 
     def create_workspace_item(self, collection):
         path = f"submission/workspaceitems?owningCollection={collection.uuid}"
@@ -166,17 +182,6 @@ class DSpaceAPI:
 
         print(f"Failed to create item")
         print(resp)
-
-    def get_workspace_item_status(self, wsitem):
-        resp = requests.get(f"{self.url}/submission/workspaceitems/{wsitem}",
-                             headers = {
-                                 "X-XSRF-TOKEN": self.xsrf_token,
-                                 "Authorization": self.auth,
-                                 },
-                             cookies = { "DSPACE-XSRF-COOKIE": self.xsrf_cookie },
-                            )
-
-        if resp.status_code == 200: return True
 
     def add_image(self, wsitem, img_path):
         path = f"submission/workspaceitems/{wsitem}"
@@ -276,7 +281,7 @@ class DSpaceAPI:
 
         return author_uuid
 
-    def create_collection(self, comm_uuid, name):
+    def create_collection(self, comm, name):
         json = {"name": name,
                 "metadata":
                   {
@@ -290,12 +295,12 @@ class DSpaceAPI:
                    }
                 }
 
-        if resp := self.post(f"core/collections?parent={comm_uuid}",
+        if resp := self.post(f"core/collections?parent={comm.uuid}",
                              { "Authorization": self.auth },
                              json = json):
             uuid = resp.json()["uuid"]
             print(f"Created collection '{name}'with uuid {uuid}")
-            return uuid
+            return Collection(name, uuid, comm)
 
         print(f"Failed to create collection '{name}': {resp.status_code}")
         print(resp.text)
@@ -313,7 +318,7 @@ class DSpaceAPI:
                              json = json):
             uuid = resp.json()["uuid"]
             print(f"Created community '{name}' with uuid {uuid}")
-            return uuid
+            return Community(name, uuid)
 
         print(f"Failed to create community '{name}': {resp.status_code}")
         print(resp.text)
@@ -478,5 +483,16 @@ class DSpaceAPI:
             case 401: print("Delete old author failed: not authorised")
             case 403: print("Delete old author failed: not permitted")
             case 404: print("Delete old author failed: not found")
+
+    def get_or_create_special_collection(self, comm_name, coll_name):
+        if (comm := self.find_community(comm_name)) is None and\
+           (comm := self.create_community(comm_name)) is None:
+            return
+
+        if (coll := self.find_collection(comm, coll_name)) is None and\
+           (comm := self.create_collection(comm, coll_name)) is None:
+            return
+
+        return coll
 
 ##############################################################################
