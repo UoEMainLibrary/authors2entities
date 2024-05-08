@@ -19,8 +19,10 @@ class DSpaceAPI:
         print("Failed to set options")
 
     def login(self, user, password):
-        if resp := self.post("authn/login",
-                             { "Content-Type": "application/x-www-form-urlencoded"},
+        if resp := requests.post(f"{self.url}/authn/login",
+                             headers = { "X-XSRF-TOKEN": self.xsrf_token,
+                                         "Content-Type": "application/x-www-form-urlencoded"},
+                             cookies = { "DSPACE-XSRF-COOKIE": self.xsrf_cookie },
                              data = f"user={user}&password={password}"):
             self.auth = resp.headers["Authorization"]
             return True
@@ -34,52 +36,108 @@ class DSpaceAPI:
         if d.login(user, password) is None: return
         return d
 
+    ##############################################################################
+
+    # helpers
+
+    def get_embedded(self, url, **params):
+        resp = requests.get(f"{self.url}/{url}", params = params)
+
+        match resp.json():
+            case { "_embedded": e }:
+                return e
+
+    def find_embedded(self, url, key, value):
+        match self.get_embedded(url):
+            case { **h }:
+                if key in h:
+                    for c in h[key]:
+                        match c:
+                            case { "name": name, "uuid": uuid } if name == value:
+                                return name, uuid
+
+    def post(self, path, headers, **opts):
+        return requests.post(f"{self.url}/{path}",
+                             headers = { "X-XSRF-TOKEN": self.xsrf_token,
+                                         "Authorization": self.auth,
+                                         **headers },
+                             cookies = { "DSPACE-XSRF-COOKIE": self.xsrf_cookie },
+                             **opts)
+
+    def put(self, path, headers, **opts):
+        return requests.put(f"{self.url}/{path}",
+                            headers = {
+                                "X-XSRF-TOKEN": self.xsrf_token,
+                                "Authorization": self.auth,
+                                **headers
+                            },
+                            cookies = { "DSPACE-XSRF-COOKIE": self.xsrf_cookie },
+                            **opts)
+
+    def delete(self, path, name):
+        resp = requests.delete(f"{self.url}/{path}",
+                               headers = {
+                                   "X-XSRF-TOKEN": self.xsrf_token,
+                                   "Authorization": self.auth,
+                                   "Content-Type": "text/uri-list"
+                               },
+                               cookies = { "DSPACE-XSRF-COOKIE": self.xsrf_cookie })
+
+        match resp.status_code:
+            case 204: print(f"{name}: delete succeeded")
+            case 401: print(f"{name}: delete not authorised")
+            case 403: print(f"{name}: delete not permitted")
+            case 404: print(f"{name}: delete not found")
+
+    def patch(self, path, json):
+        return requests.patch(f"{self.url}/{path}",
+                             headers = {
+                                 "X-XSRF-TOKEN": self.xsrf_token,
+                                 "Authorization": self.auth,
+                                 "Content-Type": "application/json",
+                                 },
+                             cookies = { "DSPACE-XSRF-COOKIE": self.xsrf_cookie },
+                             json = json)
+
+    def patch_add(self, path, items):
+        json = [ { "op": "add", "path": k, "value": v } for k, v in items.items() ]
+
+        return self.patch(path, json)
+
+    def patch_remove(self, path, items):
+        json = [ { "op": "remove", "path": k } for k in items ]
+
+        return self.patch(path, json)
+
+    ##############################################################################
+
     # get
 
     def get_communities(self):
-        resp = requests.get(f"{self.url}/core/communities")
-
-        match resp.json():
-            case { "_embedded": { "communities": l } }:
+        match self.get_embedded("core/communities"):
+            case { "communities": l }:
                 return [ Community.from_json(c) for c in l ]
 
-        return []
-
     def get_collections(self, comm):
-        resp = requests.get(f"{self.url}/core/communities/{comm.uuid}/collections")
-
-        match resp.json():
-            case { "_embedded": { "collections": l } }:
+        match self.get_embedded(f"core/communities/{comm.uuid}/collections"):
+            case { "collections": l }:
                 return [ Collection.from_json(c, comm) for c in l ]
 
-        return []
-
     def yield_collections(self):
-        for comm in self.get_communities():
-            for coll in self.get_collections(comm):
+        for comm in self.get_communities() or []:
+            for coll in self.get_collections(comm) or []:
                 yield coll
 
     def find_community(self, comm_name):
-        resp = requests.get(f"{self.url}/core/communities/search/top")
-
-        if resp.status_code == 200:
-            match resp.json():
-                case { "_embedded": { "communities": l } }:
-                    for c in l:
-                        match c:
-                            case { "name": name, "uuid": uuid } if name == comm_name:
-                                return Community(name, uuid)
+        match self.find_embedded("core/communities/search/top", "communities", comm_name):
+            case name, uuid:
+                return Community(name, uuid)
 
     def find_collection(self, comm, coll_name):
-        resp = requests.get(f"{self.url}/core/communities/{comm.uuid}/collections")
-
-        if resp.status_code == 200:
-            match resp.json():
-                case { "_embedded": { "collections": l } }:
-                    for c in l:
-                        match c:
-                            case { "name": name, "uuid": uuid } if name == coll_name:
-                                return Collection(name, uuid, comm)
+        match self.find_embedded(f"core/communities/{comm.uuid}/collections",
+                                 "collections", coll_name):
+            case name, uuid:
+                return Collection(name, uuid, comm)
 
     def get_items(self, coll, cls):
         ret, page, n = [], 0, -1
@@ -100,25 +158,15 @@ class DSpaceAPI:
         return [ obj for obj in ret if obj is not None ]
 
     def get_item(self, uuid):
-        resp = requests.get(f"{self.url}/core/items/{uuid}",
-                             headers = {
-                                 "X-XSRF-TOKEN": self.xsrf_token,
-                                 "Authorization": self.auth,
-                                 },
-                             cookies = { "DSPACE-XSRF-COOKIE": self.xsrf_cookie },
-                            )
+        match requests.get(f"{self.url}/core/items/{uuid}").json():
+            case { "metadata": { "dspace.entity.type": etype,
+                                 "dc.contributor.author": authors } }:
+                type_places = len(etype)
+                auth_places = [ h["place"] for h in authors if h["authority"][:7] != "virtual" ]
 
-        if resp.status_code == 200:
-            match resp.json():
-                case { "metadata": { "dspace.entity.type": etype,
-                                     "dc.contributor.author": authors } }:
-                    type_places = len(etype)
-                    auth_places = [ h["place"] for h in authors
-                                    if h["authority"][:7] != "virtual" ]
-                    return type_places, auth_places
+                return type_places, auth_places
 
         print("Failed to get item metadata")
-        return False
 
     def get_author_uuid(self, coll, name):
         params = { "scope": coll.uuid,
@@ -126,54 +174,24 @@ class DSpaceAPI:
                    "f.title": f"{name},contains"
                   }
 
-        resp = requests.get(f"{self.url}/discover/search/objects",
-                             headers = {
-                                 "X-XSRF-TOKEN": self.xsrf_token,
-                                 "Authorization": self.auth,
-                                 },
-                             cookies = { "DSPACE-XSRF-COOKIE": self.xsrf_cookie },
-                             params = params
-                            )
-
-        if resp.status_code == 200:
-            match resp.json():
-                case { "_embedded": { "searchResult": { "_embedded": {
-                        "objects": [ ret, *rest ] } }
-                                     } }:
-                    match ret:
-                        case { "_embedded": { "indexableObject": { "id": uuid } } }:
-                            return uuid
+        match self.get_embedded(f"discover/search/objects", **params):
+            case { "searchResult": { "_embedded": { "objects": [ ret, *rest ] } } }:
+                match ret:
+                    case { "_embedded": { "indexableObject": { "id": uuid } } }:
+                        return uuid
 
     def get_workspace_item_status(self, wsitem):
-        resp = requests.get(f"{self.url}/submission/workspaceitems/{wsitem}",
-                             headers = {
-                                 "X-XSRF-TOKEN": self.xsrf_token,
-                                 "Authorization": self.auth,
-                                 },
-                             cookies = { "DSPACE-XSRF-COOKIE": self.xsrf_cookie },
-                            )
+        resp = requests.get(f"{self.url}/submission/workspaceitems/{wsitem}")
 
         if resp.status_code == 200: return True
 
+    ##############################################################################
+
     # create
 
-    def post(self, path, headers, **opts):
-        return requests.post(f"{self.url}/{path}",
-                             headers = { "X-XSRF-TOKEN": self.xsrf_token, **headers },
-                             cookies = { "DSPACE-XSRF-COOKIE": self.xsrf_cookie },
-                             **opts)
-
     def create_workspace_item(self, collection):
-        path = f"submission/workspaceitems?owningCollection={collection.uuid}"
-
-        resp = requests.post(f"{self.url}/{path}",
-                             headers = {
-                                 "X-XSRF-TOKEN": self.xsrf_token,
-                                 "Authorization": self.auth,
-                                 "Content-Type": "application/json",
-                                 },
-                             cookies = { "DSPACE-XSRF-COOKIE": self.xsrf_cookie },
-                             json = "")
+        resp = self.post(f"submission/workspaceitems?owningCollection={collection.uuid}",
+                         { "Content-Type": "application/json" }, json = "")
 
         if resp.status_code == 201:
             match resp.json():
@@ -184,17 +202,8 @@ class DSpaceAPI:
         print(resp)
 
     def add_image(self, wsitem, img_path):
-        path = f"submission/workspaceitems/{wsitem}"
-
-        resp = requests.post(f"{self.url}/{path}",
-                             headers = {
-                                 "X-XSRF-TOKEN": self.xsrf_token,
-                                 "Authorization": self.auth,
-                                 # DO NOT include content-type header here!
-                                 },
-                             cookies = { "DSPACE-XSRF-COOKIE": self.xsrf_cookie },
-                             files = {"file": (img_path, open(img_path, 'rb').read(), 'image/png') }
-                             )
+        resp = self.post(f"submission/workspaceitems/{wsitem}", {},
+                         files = {"file": (img_path, open(img_path, 'rb').read(), 'image/png')})
 
         if resp.status_code == 201:
             match resp.json():
@@ -204,17 +213,9 @@ class DSpaceAPI:
         print(resp.text)
 
     def submit_workspace_item(self, wsitem):
-        path = f"workflow/workflowitems?projection=full"
-        data = f"{self.url}/submission/workspaceitems/{wsitem}"
-
-        resp = requests.post(f"{self.url}/{path}",
-                             headers = {
-                                 "X-XSRF-TOKEN": self.xsrf_token,
-                                 "Authorization": self.auth,
-                                 "Content-Type": "text/uri-list",
-                                 },
-                             cookies = { "DSPACE-XSRF-COOKIE": self.xsrf_cookie },
-                             data = data)
+        resp = self.post(f"workflow/workflowitems?projection=full",
+                         { "Content-Type": "text/uri-list" },
+                         data = f"{self.url}/submission/workspaceitems/{wsitem}")
 
         if resp.status_code == 201: return True
 
@@ -222,24 +223,8 @@ class DSpaceAPI:
         print(resp.text)
 
     def add_author_to_item(self, author, item):
-        path = f"core/items/{item}"
-
-        json = [
-            {
-                "op":    "add",
-                "path":  "/metadata/dspace.entity.type/-",
-                "value": { "value": "Publication" }
-            }
-        ]
-
-        resp = requests.patch(f"{self.url}/{path}",
-                             headers = {
-                                 "X-XSRF-TOKEN": self.xsrf_token,
-                                 "Authorization": self.auth,
-                                 "Content-Type": "application/json",
-                                 },
-                             cookies = { "DSPACE-XSRF-COOKIE": self.xsrf_cookie },
-                             json = json)
+        resp = self.patch_add(f"core/items/{item}",
+                              { "/metadata/dspace.entity.type/-": "Publication" })
 
         if resp.status_code != 200:
             print(f"Failed to add Publication metadata to {item}: {resp.status_code}")
@@ -247,19 +232,12 @@ class DSpaceAPI:
             print(resp.request.body)
             return
 
-        path = f"core/relationships?relationshipType=1"
-
-        resp = requests.post(f"{self.url}/{path}",
-                             headers = {
-                                 "X-XSRF-TOKEN": self.xsrf_token,
-                                 "Authorization": self.auth,
-                                 "Content-Type": "text/uri-list",
-                                 },
-                             cookies = { "DSPACE-XSRF-COOKIE": self.xsrf_cookie },
-                             data = 
-                                 f"http://localhost:8080/server/api/core/items/{item}\n" +
-                                 f"http://localhost:8080/server/api/core/items/{author}"
-                             )
+        resp = self.post(f"core/relationships?relationshipType=1",
+                         { "Content-Type": "text/uri-list" },
+                         data = 
+                         f"http://localhost:8080/server/api/core/items/{item}\n" +
+                         f"http://localhost:8080/server/api/core/items/{author}"
+                         )
 
         if resp.status_code == 201: return True
 
@@ -284,16 +262,8 @@ class DSpaceAPI:
     def create_collection(self, comm, name):
         json = {"name": name,
                 "metadata":
-                  {
-                      "dc.title": [
-                          {
-                              "language":None,
-                              "value": name,
-                              "authority":None,"confidence": -1
-                          }],
-                      "dspace.entity.type": [ { "value": "Person" } ],
-                   }
-                }
+                { "dc.title": [ { "language": None, "value": name }],
+                  "dspace.entity.type": [ { "value": "Person" } ]}}
 
         if resp := self.post(f"core/collections?parent={comm.uuid}",
                              { "Authorization": self.auth },
@@ -323,73 +293,26 @@ class DSpaceAPI:
         print(f"Failed to create community '{name}': {resp.status_code}")
         print(resp.text)
 
-    # delete
-
-    def delete_community(self, comm_uuid):
-        resp = requests.delete(f"{self.url}/core/communities/{comm_uuid}")
-
-        match resp.status_code:
-            case 204: print("Delete community succeeded")
-            case 401: print("Delete community failed: not authorised")
-            case 403: print("Delete community failed: not permitted")
-            case 404: print("Delete community failed: not found")
+    ##############################################################################
 
     # patch
 
     def patch_workspace_item(self, wsitem, surname, forename):
-        path = f"submission/workspaceitems/{wsitem}"
+        items = { "/sections/personStep/person.familyName": [{ "value": surname }],
+                  "/sections/personStep/person.givenName":  [{ "value": forename }],
+                  "/sections/license/granted":              "true" }
 
-        json = [
-            {
-                "op":    "add",
-                "path":  "/sections/personStep/person.familyName",
-                "value": [{ "value": surname }]
-            },
-            {
-                "op":    "add",
-                "path":  "/sections/personStep/person.givenName",
-                "value": [{ "value": forename }]
-            },
-            {
-                "op":    "add",
-                "path":  "/sections/license/granted",
-                "value": "true"
-            }
-        ]
-
-        resp = requests.patch(f"{self.url}/{path}",
-                             headers = {
-                                 "X-XSRF-TOKEN": self.xsrf_token,
-                                 "Authorization": self.auth,
-                                 "Content-Type": "application/json",
-                                 },
-                             cookies = { "DSPACE-XSRF-COOKIE": self.xsrf_cookie },
-                             json = json)
-
+        resp = self.patch_add(f"submission/workspaceitems/{wsitem}", items)
         if resp.status_code == 200: return wsitem
 
         print(f"Failed to patch workspace item {wsitem}: {resp.status_code}")
         print(resp.text)
 
     def patch_item(self, uuid, type_places, auth_places):
-        path = f"core/items/{uuid}"
+        items = [ f"/metadata/dc.contributor.author/{n}" for n in auth_places ] +\
+                [ f"/metadata/dspace.entity.type/{1 + n}" for n in range(type_places - 1) ]
 
-        json = [ { "op": "remove", "path": f"/metadata/dc.contributor.author/{n}" }
-                 for n in auth_places ] + [
-                { "op": "remove", "path": f"/metadata/dspace.entity.type/{1 + n}" }
-                 for n in range(type_places - 1)
-                ]
-
-        json = list(reversed(json))
-        
-        resp = requests.patch(f"{self.url}/{path}",
-                             headers = {
-                                 "X-XSRF-TOKEN": self.xsrf_token,
-                                 "Authorization": self.auth,
-                                 "Content-Type": "application/json",
-                                 },
-                             cookies = { "DSPACE-XSRF-COOKIE": self.xsrf_cookie },
-                             json = json)
+        resp = self.patch_remove(f"core/items/{uuid}", list(reversed(items)))
 
         if resp.status_code == 200: return True
 
@@ -397,24 +320,8 @@ class DSpaceAPI:
         print(resp.text)
 
     def patch_author(self, uuid, name):
-        path = f"core/items/{uuid}"
-
-        json = [
-            {
-                "op":    "add",
-                "path":  "/metadata/dc.title/-",
-                "value":  [{ "value": name }]
-            },
-        ]
-        
-        resp = requests.patch(f"{self.url}/{path}",
-                             headers = {
-                                 "X-XSRF-TOKEN": self.xsrf_token,
-                                 "Authorization": self.auth,
-                                 "Content-Type": "application/json",
-                                 },
-                             cookies = { "DSPACE-XSRF-COOKIE": self.xsrf_cookie },
-                             json = json)
+        resp = self.patch_add(f"core/items/{uuid}",
+                              { "/metadata/dc.title/-": [{ "value": name }] } )
 
         if resp.status_code == 200: return True
 
@@ -424,13 +331,7 @@ class DSpaceAPI:
     # other
 
     def absorb_author(self, new, old):
-        resp = requests.get(f"{self.url}/core/items/{old}/relationships",
-                             headers = {
-                                 "X-XSRF-TOKEN": self.xsrf_token,
-                                 "Authorization": self.auth,
-                                 },
-                             cookies = { "DSPACE-XSRF-COOKIE": self.xsrf_cookie },
-                            )
+        resp = requests.get(f"{self.url}/core/items/{old}/relationships")
 
         if resp.status_code == 200:
             match resp.json():
@@ -441,6 +342,7 @@ class DSpaceAPI:
                                                "rightItem": { "href": right }, },
                                    "id": rel_id }:
                                 self.transfer_relationships(old, new, rel_id, left, right)
+
             return True
 
         print(f"Could not find relationships for author {old}: {resp.status_code}")
@@ -449,19 +351,11 @@ class DSpaceAPI:
     def transfer_relationships(self, old, new, rel_id, left, right):
         if   left.endswith(old):  s = "leftItem"
         elif right.endswith(old): s = "rightItem"
-        else:
-            print(f"uuid mismatch in relationship {rel_id}")
-            return
+        else: print(f"uuid mismatch in relationship {rel_id}"); return
 
-        resp = requests.put(f"{self.url}/core/relationships/{rel_id}/{s}",
-                            headers = {
-                                "X-XSRF-TOKEN": self.xsrf_token,
-                                "Authorization": self.auth,
-                                "Content-Type": "text/uri-list"
-                            },
-                            cookies = { "DSPACE-XSRF-COOKIE": self.xsrf_cookie },
-                            data = f"{self.url}/core/items/{new}"
-                            )
+        resp = self.put(f"core/relationships/{rel_id}/{s}",
+                        { "Content-Type": "text/uri-list"},
+                        data = f"{self.url}/core/items/{new}")
 
         if resp.status_code != 200:
             print(f"Failed to update relationship {rel_id}: {resp.status_code}")
@@ -470,19 +364,7 @@ class DSpaceAPI:
 
         print(f"    {old} is now {new} in {rel_id}")
 
-        resp = requests.delete(f"{self.url}/core/items/{old}",
-                            headers = {
-                                "X-XSRF-TOKEN": self.xsrf_token,
-                                "Authorization": self.auth,
-                                "Content-Type": "text/uri-list"
-                            },
-                            cookies = { "DSPACE-XSRF-COOKIE": self.xsrf_cookie })
-
-        match resp.status_code:
-            case 204: print("    Delete old author succeeded")
-            case 401: print("Delete old author failed: not authorised")
-            case 403: print("Delete old author failed: not permitted")
-            case 404: print("Delete old author failed: not found")
+        self.delete(f"core/items/{old}", "    old author")
 
     def get_or_create_special_collection(self, comm_name, coll_name):
         if (comm := self.find_community(comm_name)) is None and\
@@ -490,7 +372,7 @@ class DSpaceAPI:
             return
 
         if (coll := self.find_collection(comm, coll_name)) is None and\
-           (comm := self.create_collection(comm, coll_name)) is None:
+           (coll := self.create_collection(comm, coll_name)) is None:
             return
 
         return coll

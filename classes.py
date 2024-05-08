@@ -51,13 +51,9 @@ class Item:
 
             print(f"{s} '{author}'  with id {author_uuid}")
 
-        if (places := d.get_item(self.uuid)) is None: return False
-
-        type_places, auth_places = places
-
-        if not d.patch_item(self.uuid, type_places, auth_places): return False
-
-        return True
+        match d.get_item(self.uuid):
+            case type_places, auth_places:
+                return d.patch_item(self.uuid, type_places, auth_places)
 
 @dataclass
 class Author:
