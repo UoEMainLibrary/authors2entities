@@ -140,9 +140,9 @@ class DSpaceAPI:
                 return Collection(name, uuid, comm)
 
     def get_items(self, coll, cls):
-        ret, page, n = [], 0, -1
+        page, n = 0, 1
 
-        while True:
+        while page < n:
             resp = requests.get(f"{self.url}/discover/search/objects?" +
                                 f"sort=dc.title&page={page}&size=20" +
                                 f"&scope={coll.uuid}&dsoType=ITEM")
@@ -150,12 +150,11 @@ class DSpaceAPI:
             match resp.json():
                 case { "_embedded": { "searchResult": { "_embedded": { "objects": objects },
                                                         "page": { "totalPages": n } } } }:
-                    ret += [ cls.from_json(obj) for obj in objects ]
+                    print(f"\n\033[1;36mPage {page} of {n}\033[0;37m")
+                    objs = [ cls.from_json(obj) for obj in objects ]
+                    yield from [ obj for obj in objs if obj is not None ]
 
             page += 1
-            if page >= n: break
-
-        return [ obj for obj in ret if obj is not None ]
 
     def get_item(self, uuid):
         match requests.get(f"{self.url}/core/items/{uuid}").json():
@@ -222,16 +221,30 @@ class DSpaceAPI:
         print(f"Failed to submit item {wsitem}: {resp.status_code}")
         print(resp.text)
 
-    def add_author_to_item(self, author, item):
-        resp = self.patch_add(f"core/items/{item}",
-                              { "/metadata/dspace.entity.type/-": "Publication" })
+    def set_item_type_to_publication(self, item):
+        resp = requests.get(f"{self.url}/core/items/{item.uuid}")
 
         if resp.status_code != 200:
-            print(f"Failed to add Publication metadata to {item}: {resp.status_code}")
+            print(f"Failed to get metadata from {item.uuid}: {resp.status_code}")
             print(resp.text)
             print(resp.request.body)
-            return
+            return False
 
+        match resp.json():
+            case { "metadata": { "dspace.entity.type": etypes } }:
+                for etype in etypes:
+                    if etype["value"] == "Publication": return True
+
+        resp = self.patch_add(f"core/items/{item.uuid}",
+                              { "/metadata/dspace.entity.type/-": "Publication" })
+
+        if resp.status_code == 200: return True
+
+        print(f"Failed to add Publication metadata to {item.uuid}: {resp.status_code}")
+        print(resp.text)
+        print(resp.request.body)
+
+    def add_author_to_item(self, author, item):
         resp = self.post(f"core/relationships?relationshipType=1",
                          { "Content-Type": "text/uri-list" },
                          data = 
@@ -308,9 +321,8 @@ class DSpaceAPI:
         print(f"Failed to patch workspace item {wsitem}: {resp.status_code}")
         print(resp.text)
 
-    def patch_item(self, uuid, type_places, auth_places):
-        items = [ f"/metadata/dc.contributor.author/{n}" for n in auth_places ] +\
-                [ f"/metadata/dspace.entity.type/{1 + n}" for n in range(type_places - 1) ]
+    def remove_old_author_metadata(self, uuid, auth_places):
+        items = [ f"/metadata/dc.contributor.author/{n}" for n in auth_places ]
 
         resp = self.patch_remove(f"core/items/{uuid}", list(reversed(items)))
 
