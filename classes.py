@@ -29,18 +29,18 @@ class Item:
     def __lt__(self, other): return self.title < other.title
 
     def process(self, d, collection):
-        print(f"\033[1;32m{self.uuid} \033[33m{self.title}\033[0;37m ({len(self.authors)})")
+        print(f"\033[1;32m{self.uuid}\n\033[33m{self.title}\033[0;37m ({len(self.authors)})")
 
         d.set_item_type_to_publication(self)
 
         for a, auth in self.authors:
             if auth.startswith("virtual"):
-                print(f"\033[35mSkipping\033[37m '{a}'")
+                print(f"    \033[35mSkipping\033[37m '{a}'")
                 continue
 
             author = names.tidy(a)
 
-            if a != author: print(f"    \033[32mConverted\033[37m' {a}' to '{author}'")
+            if a != author: print(f"        \033[32mConverted\033[37m' {a}' to '{author}'")
 
             for c in "|;:":
                 if c in author:
@@ -61,9 +61,9 @@ class Item:
 
     def add_author_to_item(self, d, author, collection):
         if (author_uuid := d.get_author_uuid(collection, author)) is not None:
-            s = f"\033[36mAdded\033[37m"
+            s = f"    \033[36mAdded\033[37m"
         elif (author_uuid := d.create_author_entity(collection, author)) is not None:
-            s = f"\033[33mCreated\033[37m"
+            s = f"    \033[33mCreated\033[37m"
         else:
             return False
                 

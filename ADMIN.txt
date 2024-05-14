@@ -88,6 +88,9 @@ docker exec -ti dspace /bin/bash
   /dspace/bin/dspace initialize-entities -f /dspace/config/entities/relationship-types.xml
   /dspace/bin/dspace index-authority
 
+
+dspace/config//modules/authentication.cfg has token expiry time
+
 ##############################################################################
 
 Cleaning database (old)

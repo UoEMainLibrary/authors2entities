@@ -29,6 +29,17 @@ class DSpaceAPI:
 
         print("Failed to log in")
 
+    def reauthenticate(self):
+        resp = requests.post(f"{self.url}/authn/login",
+                             headers = { "X-XSRF-TOKEN": self.xsrf_token,
+                                         "Authorization": self.auth },
+                             cookies = { "DSPACE-XSRF-COOKIE": self.xsrf_cookie },
+                             )
+        self.auth = resp.headers["Authorization"]
+        print("\n\033[1;45;33m***********************\033[0;40;37m\n")
+        print("\n\033[1;45;33m*** Reauthenticated ***\033[0;40;37m\n")
+        print("\n\033[1;45;33m***********************\033[0;40;37m\n")
+
     @classmethod
     def start(cls, host, port, user, password):
         d = cls(host, port)
