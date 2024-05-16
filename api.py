@@ -1,4 +1,5 @@
-import requests, pprint, json
+import requests, json, sys
+from datetime import datetime
 
 from classes import *
 
@@ -8,6 +9,9 @@ class DSpaceAPI:
         self.url = f"http://{host}:{port}/server/api"
         self.auth = None
 
+        s = datetime.now().isoformat(timespec = "seconds")
+        self.logger = open(f"logs/{s}.log", "w")
+
     def options(self):
         resp = requests.options(self.url)
 
@@ -15,8 +19,6 @@ class DSpaceAPI:
             self.xsrf_cookie = resp.cookies["DSPACE-XSRF-COOKIE"]
             self.xsrf_token  = resp.headers["DSPACE-XSRF-TOKEN"]
             return True
-
-        print("Failed to set options")
 
     def login(self, user, password):
         if resp := requests.post(f"{self.url}/authn/login",
@@ -27,8 +29,6 @@ class DSpaceAPI:
             self.auth = resp.headers["Authorization"]
             return True
 
-        print("Failed to log in")
-
     def reauthenticate(self):
         resp = requests.post(f"{self.url}/authn/login",
                              headers = { "X-XSRF-TOKEN": self.xsrf_token,
@@ -36,16 +36,34 @@ class DSpaceAPI:
                              cookies = { "DSPACE-XSRF-COOKIE": self.xsrf_cookie },
                              )
         self.auth = resp.headers["Authorization"]
-        print("\n\033[1;45;33m***********************\033[0;40;37m\n")
-        print("\n\033[1;45;33m*** Reauthenticated ***\033[0;40;37m\n")
-        print("\n\033[1;45;33m***********************\033[0;40;37m\n")
 
     @classmethod
     def start(cls, host, port, user, password):
         d = cls(host, port)
-        if d.options() is None: return
-        if d.login(user, password) is None: return
+
+        if d.options() is None:
+            d.log_to_screen("Failed to set options\n", fg = 1, bright = 1)
+            d.close()
+            return
+
+        if d.login(user, password) is None:
+            d.log_to_screen("Failed to log in\n", fg = 1, bright = 1)
+            d.close()
+            return
+
         return d
+
+    def close(self):
+        self.logger.close()
+
+    def log_to_screen(self, s, fg = 7, bg = 0, bright = 0):
+        sys.stderr.write(f"\033[3{fg};4{bg};{bright}m{s}\033[37;40;0m")
+
+    def log(self, s): self.logger.write(s + "\n")
+
+    def log_resp(self, s, resp):
+        self.logger.write(f"\n*** {s}: {resp.status_code}\n")
+        self.logger.write(f"{resp.text}\n\n")
 
     ##############################################################################
 
@@ -95,10 +113,10 @@ class DSpaceAPI:
                                cookies = { "DSPACE-XSRF-COOKIE": self.xsrf_cookie })
 
         match resp.status_code:
-            case 204: print(f"{name}: delete succeeded")
-            case 401: print(f"{name}: delete not authorised")
-            case 403: print(f"{name}: delete not permitted")
-            case 404: print(f"{name}: delete not found")
+            case 204: self.log(f"{name}: delete succeeded")
+            case 401: self.log(f"{name}: delete not authorised")
+            case 403: self.log(f"{name}: delete not permitted")
+            case 404: self.log(f"{name}: delete not found")
 
     def patch(self, path, json):
         return requests.patch(f"{self.url}/{path}",
@@ -151,21 +169,28 @@ class DSpaceAPI:
                 return Collection(name, uuid, comm)
 
     def get_items(self, coll, cls):
-        page, n = 0, 1
+        page, pages, count = 0, 1, 1
 
-        while page < n:
+        while page < pages:
             resp = requests.get(f"{self.url}/discover/search/objects?" +
                                 f"sort=dc.title&page={page}&size=20" +
                                 f"&scope={coll.uuid}&dsoType=ITEM")
 
             match resp.json():
                 case { "_embedded": { "searchResult": { "_embedded": { "objects": objects },
-                                                        "page": { "totalPages": n } } } }:
-                    print(f"\n\033[1;36mPage {page} of {n}\033[0;37m")
+                                                        "page": { "totalPages": pages } } } }:
                     objs = [ cls.from_json(obj) for obj in objects ]
-                    yield from [ obj for obj in objs if obj is not None ]
+
+                    for obj in objs:
+                        if obj is not None:
+                            self.log_to_screen(f"\rPage {page} of {pages}", fg = 6, bright = 1)
+                            self.log_to_screen(f" item {count}", fg = 2, bright = 1)
+                            count += 1
+                            yield obj
 
             page += 1
+
+        self.log_to_screen("\n")
 
     def get_item(self, uuid):
         match requests.get(f"{self.url}/core/items/{uuid}").json():
@@ -176,7 +201,7 @@ class DSpaceAPI:
 
                 return type_places, auth_places
 
-        print("Failed to get item metadata")
+        self.log_("\n*** Failed to get item metadata")
 
     def get_author_uuid(self, coll, name):
         params = { "scope": coll.uuid,
@@ -208,8 +233,7 @@ class DSpaceAPI:
                 case { "id": wsitem, "_embedded": { "item": { "uuid": uuid }}}:
                     return wsitem, uuid
 
-        print(f"Failed to create item")
-        print(resp)
+        self.log_resp("Failed to create item {wsitem}", resp)
 
     def add_image(self, wsitem, img_path):
         resp = self.post(f"submission/workspaceitems/{wsitem}", {},
@@ -219,8 +243,7 @@ class DSpaceAPI:
             match resp.json():
                 case { "id": wsitem }: return wsitem
 
-        print(f"Failed to add image '{img_path}' to id {wsitem}: {resp.status_code}")
-        print(resp.text)
+        self.log_resp(f"Failed to add image '{img_path}' to id {wsitem}", resp)
 
     def submit_workspace_item(self, wsitem):
         resp = self.post(f"workflow/workflowitems?projection=full",
@@ -229,16 +252,14 @@ class DSpaceAPI:
 
         if resp.status_code == 201: return True
 
-        print(f"Failed to submit item {wsitem}: {resp.status_code}")
-        print(resp.text)
+        self.log_resp(f"Failed to submit item {wsitem}", resp)
 
     def set_item_type_to_publication(self, item):
         resp = requests.get(f"{self.url}/core/items/{item.uuid}")
 
         if resp.status_code != 200:
-            print(f"Failed to get metadata from {item.uuid}: {resp.status_code}")
-            print(resp.text)
-            print(resp.request.body)
+            self.log_resp(f"Failed to get metadata from {item.uuid}", resp)
+            self.log(resp.request.body)
             return False
 
         match resp.json():
@@ -251,9 +272,8 @@ class DSpaceAPI:
 
         if resp.status_code == 200: return True
 
-        print(f"Failed to add Publication metadata to {item.uuid}: {resp.status_code}")
-        print(resp.text)
-        print(resp.request.body)
+        self.log_resp("Failed to add Publication metadata to {item.uuid}", resp)
+        self.log(resp.request.body)
 
     def add_author_to_item(self, author, item):
         resp = self.post(f"core/relationships?relationshipType=1",
@@ -265,8 +285,7 @@ class DSpaceAPI:
 
         if resp.status_code == 201: return True
 
-        print(f"Failed to add relationship: {resp.status_code}")
-        print(resp.text)
+        self.log_resp("Failed to add relationship", resp)
         
     def create_author_entity(self, collection, author):
         if (ret := self.create_workspace_item(collection)) is None: return
@@ -293,11 +312,10 @@ class DSpaceAPI:
                              { "Authorization": self.auth },
                              json = json):
             uuid = resp.json()["uuid"]
-            print(f"Created collection '{name}'with uuid {uuid}")
+            self.log(f"Created collection '{name}'with uuid {uuid}")
             return Collection(name, uuid, comm)
 
-        print(f"Failed to create collection '{name}': {resp.status_code}")
-        print(resp.text)
+        self.log_resp(f"Failed to create collection '{name}'", resp)
 
     def create_community(self, name):
         json = {"type": {"value": name},
@@ -311,11 +329,10 @@ class DSpaceAPI:
                              { "Authorization": self.auth },
                              json = json):
             uuid = resp.json()["uuid"]
-            print(f"Created community '{name}' with uuid {uuid}")
+            self.log(f"Created community '{name}' with uuid {uuid}")
             return Community(name, uuid)
 
-        print(f"Failed to create community '{name}': {resp.status_code}")
-        print(resp.text)
+        self.log_resp(f"Failed to create community '{name}'", resp)
 
     ##############################################################################
 
@@ -329,8 +346,7 @@ class DSpaceAPI:
         resp = self.patch_add(f"submission/workspaceitems/{wsitem}", items)
         if resp.status_code == 200: return wsitem
 
-        print(f"Failed to patch workspace item {wsitem}: {resp.status_code}")
-        print(resp.text)
+        self.log_resp(f"Failed to patch workspace item {wsitem}", resp)
 
     def remove_old_author_metadata(self, uuid, auth_places):
         items = [ f"/metadata/dc.contributor.author/{n}" for n in auth_places ]
@@ -339,8 +355,7 @@ class DSpaceAPI:
 
         if resp.status_code == 200: return True
 
-        print(f"Failed to patch item {uuid}: {resp.status_code}")
-        print(resp.text)
+        self.log_resp(f"Failed to patch item {uuid}", resp)
 
     def patch_author(self, uuid, name):
         resp = self.patch_add(f"core/items/{uuid}",
@@ -348,8 +363,7 @@ class DSpaceAPI:
 
         if resp.status_code == 200: return True
 
-        print(f"Failed to patch item {uuid}: {resp.status_code}")
-        print(resp.text)
+        self.log_resp(f"Failed to patch author {uuid}", resp)
 
     # other
 
@@ -368,26 +382,25 @@ class DSpaceAPI:
 
             return True
 
-        print(f"Could not find relationships for author {old}: {resp.status_code}")
-        print(resp.text)
+        self.log_resp(f"Could not find relationships for author {old}", resp)
 
     def transfer_relationships(self, old, new, rel_id, left, right):
         if   left.endswith(old):  s = "leftItem"
         elif right.endswith(old): s = "rightItem"
-        else: print(f"uuid mismatch in relationship {rel_id}"); return
+        else:
+            self.log(f"uuid mismatch in relationship {rel_id}")
+            return
 
         resp = self.put(f"core/relationships/{rel_id}/{s}",
                         { "Content-Type": "text/uri-list"},
                         data = f"{self.url}/core/items/{new}")
 
-        if resp.status_code != 200:
-            print(f"Failed to update relationship {rel_id}: {resp.status_code}")
-            print(resp.text)
-            return
+        if resp.status_code == 200:
+            self.log(f"    {old} is now {new} in {rel_id}")
+            self.delete(f"core/items/{old}", "    old author")
+            return True
 
-        print(f"    {old} is now {new} in {rel_id}")
-
-        self.delete(f"core/items/{old}", "    old author")
+        self.log(f"Failed to update relationship {rel_id}", resp)
 
     def get_or_create_special_collection(self, comm_name, coll_name):
         if (comm := self.find_community(comm_name)) is None and\
