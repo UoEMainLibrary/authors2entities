@@ -87,7 +87,7 @@ class Item:
 
 ##############################################################################
 
-@dataclass
+@dataclass(frozen = True)
 class Author:
     uuid:     str
     surname:  str
@@ -110,10 +110,25 @@ class Author:
 
                 return cls(uuid, sn, fn)
 
-    def __lt__(self, other): return self.title < other.title
+    def __lt__(self, other): return self.fullname < other.fullname
 
     @property
     def fullname(self): return f"{self.surname}, {self.forename}"
+
+    def similarity(self, other):
+        s1 = self.surname.split(",", 1)[0]
+        s2 = other.surname.split(",", 1)[0]
+
+        t1, t2 = names.deaccent(s1), names.deaccent(s2)
+
+        if t1 != t2: return 0.0
+
+#        if self.forename != other.forename: return 0.0
+
+        for i1, i2 in zip(self.forename.split(), other.forename.split()):
+            if i1[0] != i2[0]: return 0.1
+
+        return 1.0
 
 ##############################################################################
 

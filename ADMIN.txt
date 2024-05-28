@@ -113,209 +113,41 @@ pg_dump -U [db_username] [db_name] > [database_dump.sql]
 
 ##############################################################################
 
-Metadata
-========
+RSC counts
+----------
 
-name   = "L., Logatcheva, K." [2]
-format = "A./ A/ A."'
-uuid   = "d8f75246-f461-4129-bbae-151a53ec96af" [1]
+Biomathematics and Statistics Scotland (BioSS)  Journals 121
 
+James Hutton Institute  Books and Book Chapters   94
+James Hutton Institute  Journals   1195
+James Hutton Institute  Maps   20
+James Hutton Institute  Reports   474
+James Hutton Institute  Theses and Dissertations   0
 
-Object
-======
+Marine Scotland Science  Articles   468
+Marine Scotland Science  Books and Book Chapters   25
+Marine Scotland Science  Conference Materials   527
+Marine Scotland Science  Other   13
+Marine Scotland Science  Reports   144
 
-name = "Behavioural economics: assessing food waste innovations diffusion through ABM models -
-Insights from Italy and the Netherlands."
-uuid = "d8f75246-f461-4129-bbae-151a53ec96af"
+Moredun  Books and Book Chapters   21
+Moredun  Conference Materials   9
+Moredun  Journals   1719
+Moredun  Reports   2
+Moredun  Theses and Dissertations   1
 
+Royal Botanic Garden Edinburgh (RBGE)  Articles   3434
+Royal Botanic Garden Edinburgh (RBGE)  Books and Book Chapter   2390
+Royal Botanic Garden Edinburgh (RBGE)  Conference Materials   15
+Royal Botanic Garden Edinburgh (RBGE)  Data and Databases   5
+Royal Botanic Garden Edinburgh (RBGE)  Other   1486
+Royal Botanic Garden Edinburgh (RBGE)  Reports   504
+Royal Botanic Garden Edinburgh (RBGE)  Theses and Dissertations   805
 
-Collection
-==========
-
-name = "Reports"
-uuid = "3c1f4356-d58d-41ac-bc7f-77198870c129" [3]
-
-name = "James Hutton Institute" [4]
-uuid = "bebe0fed-a20f-404d-99b4-05b613494a95" [5]
-
-
-metadatavalue:
-
-dspace_object_id  = [1]          [5]
-metadata_field_id = 9            70
-metadata_value_id = 1074241      11028
-text_value        = [2]          [4]
-
-
-collection2item:                   item:
-
-collection_id = [3]                owning_collection
-item_id       = [1]                uuid
-
-
-community2collection:
-
-collection_id = [3]
-community_id  = [5]
-
+SASA  Articles   256
+SASA  Books and Book Chapters   105
+SASA  Conference Materials   279
+SASA  Reports   19
+SASA  Theses and Dissertations   2
 
 ##############################################################################
-
-Postgres
---------
-
-# https://stackoverflow.com/questions/37694987/connecting-to-postgresql-in-a-docker-container-from-outside
-
-
-(don't actually need this!)
-docker run --name dspacedb --net host -e POSTGRES_PASSWORD=dspace -d postgres
-
-
-psql -h localhost -p 5432 -U postgres
-
-
-Tables:
-
-| metadatafieldregistry
-
- metadata_field_id | metadata_schema_id |   element   | qualifier |
-                 1 |                  2 | firstname   |           | 
-                 2 |                  2 | lastname    |           | 
-                 3 |                  2 | phone       |           | 
-                 4 |                  2 | language    |           | 
-                 5 |                  1 | provenance  |           | 
-                 6 |                  1 | rights      | license   | 
-                 7 |                  1 | contributor |           |
-                 8 |                  1 | contributor | advisor   |
-                 9 |                  1 | contributor | author    | 
-                10 |                  1 | contributor | editor    | 
-
-| metadatavalue           
-
-fields are:
-
- metadata_value_id
- metadata_field_id
- text_value
- text_lang
- place
- authority
- confidence
- dspace_object_id           @@@
-
-
-community.uuid  <----> @@@ <----> community2collection.community_id
-collection.uuid <----> @@@ <----> community2collection.collection_id
-
-item.uuid              <----> @@@
-     submitter.id      <----> @@@
-     owning_collection <----> @@@
-
-relationship.left_id   <----> @@@
-             right_id  <----> @@@
-             type_id   <----> relationship_type
-
-850f   root
-
-d262   Community
-
-07e3   Collection
-23b7   Person collection
-b60c   Publication collection
-
-3f2c   Maria Aamelfot           these are both items!
-f615   alpacas
-
-
-SO:
-
-relationship
-------------
-
- id |               left_id                | type_id |               right_id               |
-----+--------------------------------------+---------+--------------------------------------+
-  1 | 427bb98f-3048-4169-9f87-4113b4c3f615 |       1 | 09baf063-8fb9-411f-90aa-d843c2293f2c |
-
-
-relationship_type
------------------
-
- id | left_type | right_type |        leftward_type        |       rightward_type        |
-----+-----------+------------+-----------------------------+-----------------------------+
-  1 |         2 |          3 | isAuthorOfPublication       | isPublicationOfAuthor       |
-  2 |         2 |          4 | isProjectOfPublication      | isPublicationOfProject      |
-  3 |         2 |          5 | isOrgUnitOfPublication      | isPublicationOfOrgUnit      |
-  4 |         3 |          4 | isProjectOfPerson           | isPersonOfProject           |
-  5 |         3 |          5 | isOrgUnitOfPerson           | isPersonOfOrgUnit           |
-  6 |         4 |          5 | isOrgUnitOfProject          | isProjectOfOrgUnit          |
-  7 |         6 |          7 | isVolumeOfJournal           | isJournalOfVolume           |
-  8 |         7 |          8 | isIssueOfJournalVolume      | isJournalVolumeOfIssue      |
-  9 |         2 |          5 | isAuthorOfPublication       | isPublicationOfAuthor       |
- 10 |         8 |          2 | isPublicationOfJournalIssue | isJournalIssueOfPublication |
-
-
-item
------
-
-                  uuid                 |             submitter_id             |          owning_collection           
-+--------------------------------------+--------------------------------------+--------------------------------------
-| 09baf063-8fb9-411f-90aa-d843c2293f2c | bcaa2c69-50a0-42f2-9418-ab795057850f | 066e4171-e0ff-4bae-8f5c-58f6279623b7
-| 427bb98f-3048-4169-9f87-4113b4c3f615 | bcaa2c69-50a0-42f2-9418-ab795057850f | b0cc3597-9a34-4c16-903e-f7136edbb60c
-
-##############################################################################
-
-
-##############################################################################
-
-
-
-POST /server/api/submission/workspaceitems/26595 HTTP/1.1
-Host: localhost:8080
-User-Agent: Mozilla/5.0 (X11; Ubuntu; Linux x86_64; rv:124.0) Gecko/20100101 Firefox/124.0
-Accept: */*
-Accept-Language: en-GB,en;q=0.5
-Accept-Encoding: gzip, deflate, br
-X-XSRF-TOKEN: 56e88d1d-4235-4157-8860-79b36f4fd3f7
-Authorization: Bearer eyJhbGciOiJIUzI1NiJ9.eyJlaWQiOiJkOTllMmExMC03M2JmLTQ1MzItOGJiZi1kY2QwOTE4N2I5NzIiLCJzZyI6W10sImF1dGhlbnRpY2F0aW9uTWV0aG9kIjoicGFzc3dvcmQiLCJleHAiOjE3MTM0MzI0OTZ9.7uqL4L-6JTfZwr51RoBaMQ0cg4OEXiHb5J-UsBJjoKY
-Content-Type: multipart/form-data; boundary=---------------------------207266100823146459411852072821
-Content-Length: 771
-Origin: http://localhost:4000
-DNT: 1
-Sec-GPC: 1
-Connection: keep-alive
-Referer: http://localhost:4000/
-Cookie: DSPACE-XSRF-COOKIE=56e88d1d-4235-4157-8860-79b36f4fd3f7; CORRELATION-ID=03ede36f-85d2-46c9-a0c3-732a1b761f5a; dsLanguage=en; klaro-anonymous=%7B%22authentication%22%3Atrue%2C%22preferences%22%3Atrue%2C%22acknowledgement%22%3Atrue%7D; XSRF-TOKEN=56e88d1d-4235-4157-8860-79b36f4fd3f7; dsAuthInfo={%22accessToken%22:%22eyJhbGciOiJIUzI1NiJ9.eyJlaWQiOiJkOTllMmExMC03M2JmLTQ1MzItOGJiZi1kY2QwOTE4N2I5NzIiLCJzZyI6W10sImF1dGhlbnRpY2F0aW9uTWV0aG9kIjoicGFzc3dvcmQiLCJleHAiOjE3MTM0MzI0OTZ9.7uqL4L-6JTfZwr51RoBaMQ0cg4OEXiHb5J-UsBJjoKY%22%2C%22expires%22:1713432496000}; klaro-d99e2a10-73bf-4532-8bbf-dcd09187b972={%22authentication%22:true%2C%22preferences%22:true%2C%22acknowledgement%22:true}
-Sec-Fetch-Dest: empty
-Sec-Fetch-Mode: cors
-Sec-Fetch-Site: same-site
-
-
-
-
------------------------------207266100823146459411852072821
-Content-Disposition: form-data; name="file"; filename="black_pixel.png"
-Content-Type: image/png
-
-PNG
-
-   
-IHDR         wSÞ  iCCPICC profile  (}=HÃ@Å_ÓR+vqÈPì¢"µ
-E¨jVL.ý&
-I£àZpðc±êàâ¬«« ~8;8)ºHÿK
--b<8îÇ»{»wÐ¬2Í
-% M·ÍL*)æò«bï+BèGAdfsïøºG¯wqåîÏ1 ,Dâ3LxxfÓ68ïGYYVÏ'Lº ñ#×ß8\xfÔÌfæ£Äb©.feS#&©NùBÎcóg­Zgí{òF
-úÊ2×i"E,AuTP8­:)2´ôñ¸~\
-¹*`äX@
-d×þ¿»µS^R$	ô¼8ÎÇÐ»´ó}ì8­ ø\é­	Ì~Þèh±#`p¸¸îhÊp¹?²)»R¦P,ïgôMy`è¯y½µ÷qú d©«ô
-pp({ÝçÝ}Ý½ý{¦ÝßæUrn
-D"   	pHYs  .#  .#x¥?v   tIMEè
-6ýBQ   tEXtComment Created with GIMPW   IDAT×c   DQ>    IEND®B`
------------------------------207266100823146459411852072821--
-
---179367c1dd6a02c05a03d5b7c8f35216
-Content-Disposition: form-data; name="file"; filename="black_pixel.png"
-Content-Type: image/png
-
-\x89PNG
-\x1a\n\x00\x00\x00\rIHDR\x00\x00\x00\x01\x00\x00\x00\x01\x08\x02\x00\x00\x00\x90wS\xde\x00\x00\x01\x83iCCPICC profile\x00\x00(\x91}\x91=H\xc3@\x1c\xc5_\xd3\x8aR+\x0ev\x10q\xc8P\x9d\xec\xa2"\x8e\xb5\nE\xa8\x10j\x85V\x1dL.\xfd\x82&\rI\x8a\x8b\xa3\xe0Zp\xf0c\xb1\xea\xe0\xe2\xac\xab\x83\xab \x08~\x808;8)\xbaH\x89\xffK\n-b<8\xee\xc7\xbb{\x8f\xbbw\x80\xd0\xac2\xcd\n%\x00M\xb7\xcdL*)\xe6\xf2\xabb\xef+B\xe8G\x18A\x04df\x19s\x92\x94\x86\xef\xf8\xbaG\x80\xafwq\x9e\xe5\x7f\xee\xcf1\xa0\x16,\x06\x04D\xe2\x043L\x9bx\x83xf\xd368\xef\x13GYYV\x89\xcf\x89\'L\xba \xf1#\xd7\x15\x8f\xdf8\x97\\\x16xf\xd4\xccf\xe6\x89\xa3\xc4b\xa9\x8b\x95.feS#\x9e&\x8e\xa9\x9aN\xf9B\xcec\x95\xf3\x16g\xadZg\xed{\xf2\x17F\n\xfa\xca2\xd7i\x8e"\x85E,A\x82\x08\x05uTP\x85\x8d8\xad:)\x162\xb4\x9f\xf4\xf1\x8f\xb8~\x89\\\n\xb9*`\xe4X@\r\x1ad\xd7\x0f\xfe\x07\xbf\xbb\xb5\x8aS\x93^R$\t\xf4\xbc8\xce\xc7\x18\xd0\xbb\x0b\xb4\x1a\x8e\xf3}\xec8\xad\x13 \xf8\x0c\\\xe9\x1d\x7f\xad\t\xcc~\x92\xde\xe8h\xb1#`p\x1b\xb8\xb8\xeeh\xca\x1ep\xb9\x03\x0c?\x19\xb2)\xbbR\x90\xa6P,\x02\xefg\xf4My`\xe8\x16\x08\xafy\xbd\xb5\xf7q\xfa\x00d\xa9\xab\xf4\rpp\x08\x8c\x97({\xdd\xe7\xdd}\xdd\xbd\xfd{\xa6\xdd\xdf\x0f\xe6Urn\x15\rD"\x00\x00\x00\tpHYs\x00\x00.#\x00\x00.#\x01x\xa5?v\x00\x00\x00\x07tIME\x07\xe8\x04\x0b\n\x036\xfdBQ\x02\x00\x00\x00\x19tEXtComment\x00Created with GIMPW\x81\x0e\x17\x00\x00\x00\x0cIDAT\x08\xd7c\x90\x14\x15\x05\x00\x00\x8e\x00D\x9dQ>\x8c\x00\x00\x00\x00IEND\xaeB`\x82
---179367c1dd6a02c05a03d5b7c8f35216--
