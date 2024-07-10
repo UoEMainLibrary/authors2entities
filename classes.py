@@ -35,7 +35,7 @@ class Item:
         d.set_item_type_to_publication(self)
 
         for a, auth in self.authors:
-            if auth.startswith("virtual"):
+            if auth is not None and auth.startswith("virtual"):
                 d.log(f"    Skipping '{a}'")
                 continue
 

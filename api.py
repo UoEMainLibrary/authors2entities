@@ -197,7 +197,8 @@ class DSpaceAPI:
             case { "metadata": { "dspace.entity.type": etype,
                                  "dc.contributor.author": authors } }:
                 type_places = len(etype)
-                auth_places = [ h["place"] for h in authors if h["authority"][:7] != "virtual" ]
+                auth_places = [ h["place"] for h in authors
+                                if h["authority"] is None or h["authority"][:7] != "virtual" ]
 
                 return type_places, auth_places
 

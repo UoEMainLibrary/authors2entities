@@ -51,8 +51,8 @@ def get_authors_from_file():
 
 ##############################################################################
 
-#items   = get_authors_from_database()
-items   = get_authors_from_file()
+items   = get_authors_from_database()
+#items   = get_authors_from_file()
 
 authors = defaultdict(lambda: [])
 
@@ -63,7 +63,7 @@ for item in items: #d.get_items(coll, Author):
 
 for i in sorted(authors.keys()):
     pairs = [ (a1, a2) for a1, a2 in itertools.combinations(authors[i], 2)
-              if a1.similarity(a2) > 0.8 ]
+              if a1.similarity(a2) > 0.6 ]
 
     if len(pairs) == 0: continue
 
