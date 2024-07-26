@@ -171,6 +171,7 @@ class DSpaceAPI:
     def get_items(self, coll, cls):
         page, pages, count = 0, 1, 1
 
+        self.log_to_screen(f"{coll.community.name}\n", fg = 3, bright = 1)
         while page < pages:
             resp = requests.get(f"{self.url}/discover/search/objects?" +
                                 f"sort=dc.title&page={page}&size=20" +
@@ -183,14 +184,15 @@ class DSpaceAPI:
 
                     for obj in objs:
                         if obj is not None:
-                            self.log_to_screen(f"\rPage {page} of {pages}", fg = 6, bright = 1)
-                            self.log_to_screen(f" item {count}", fg = 2, bright = 1)
+                            self.log_to_screen(f"\r  {coll.name}", fg = 6, bright = 1)
+                            self.log_to_screen(f" {page} of {pages}/{count}", fg = 2, bright = 1)
                             count += 1
                             yield obj
 
             page += 1
 
-        self.log_to_screen("\n")
+        self.log_to_screen(f"\r  {coll.name}", fg = 6, bright = 1)
+        self.log_to_screen(f" {page}/{count}                  \n", fg = 2, bright = 1)
 
     def get_item(self, uuid):
         match requests.get(f"{self.url}/core/items/{uuid}").json():

@@ -11,6 +11,7 @@ PASS = "dspace"
 
 COMMUNITY  = "Entities"
 COLLECTION = "Entities"
+THRESHOLD  = 1.0
 
 ##############################################################################
 
@@ -43,8 +44,7 @@ for i in sorted(titles.keys()):
     for a1, a2 in itertools.combinations(titles[i], 2):
         t1, t2 = a1.title, a2.title
         d = SequenceMatcher(None, t1, t2).ratio()
-        if d > 0.8:
-            pairs.append((t1, t2))
+        if d >= THRESHOLD: pairs.append((t1, t2))
 
     if len(pairs) == 0: continue
 
